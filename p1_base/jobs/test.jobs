@@ -1,0 +1,4 @@
+CREATE 5 3 3
+RESERVE 5 [(1,1) (2,2)]
+RESERVE 5 [(1,3)]
+SHOW 5
