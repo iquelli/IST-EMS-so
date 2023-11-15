@@ -181,16 +181,4 @@ int main(int argc, char *argv[]) {
   }
 
   return 0;
-
-  // TODO: Get directory of .jobs files and create a list
-  //       if number of files = 0 print error "Failed to open directory or no
-  //       .jobs files in directory"
-
-  // TODO: For loop the files in the list
-
-  // TODO: Inside the for loop, open the file in the beginning, do while
-  // get_next(file_fd) != EOC
-  //        to see when it finishes reading that file. When it finishes, close
-  //        file.
-  //       Keep rest of the code as is.
 }
