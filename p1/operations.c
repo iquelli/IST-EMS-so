@@ -3,17 +3,17 @@
 #include <time.h>
 
 // as que adicionei
-#include <unistd.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "eventlist.h"
 
 // também adicionei
 #include "constants.h"
 
-static struct EventList* event_list = NULL;
+static struct EventList *event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
 
 /// Calculates a timespec from a delay in milliseconds.
@@ -24,24 +24,26 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
 }
 
 /// Gets the event with the given ID from the state.
-/// @note Will wait to simulate a real system accessing a costly memory resource.
+/// @note Will wait to simulate a real system accessing a costly memory
+/// resource.
 /// @param event_id The ID of the event to get.
 /// @return Pointer to the event if found, NULL otherwise.
-static struct Event* get_event_with_delay(unsigned int event_id) {
+static struct Event *get_event_with_delay(unsigned int event_id) {
   struct timespec delay = delay_to_timespec(state_access_delay_ms);
-  nanosleep(&delay, NULL);  // Should not be removed
+  nanosleep(&delay, NULL); // Should not be removed
 
   return get_event(event_list, event_id);
 }
 
 /// Gets the seat with the given index from the state.
-/// @note Will wait to simulate a real system accessing a costly memory resource.
+/// @note Will wait to simulate a real system accessing a costly memory
+/// resource.
 /// @param event Event to get the seat from.
 /// @param index Index of the seat to get.
 /// @return Pointer to the seat.
-static unsigned int* get_seat_with_delay(struct Event* event, size_t index) {
+static unsigned int *get_seat_with_delay(struct Event *event, size_t index) {
   struct timespec delay = delay_to_timespec(state_access_delay_ms);
-  nanosleep(&delay, NULL);  // Should not be removed
+  nanosleep(&delay, NULL); // Should not be removed
 
   return &event->data[index];
 }
@@ -52,7 +54,9 @@ static unsigned int* get_seat_with_delay(struct Event* event, size_t index) {
 /// @param row Row of the seat.
 /// @param col Column of the seat.
 /// @return Index of the seat.
-static size_t seat_index(struct Event* event, size_t row, size_t col) { return (row - 1) * event->cols + col - 1; }
+static size_t seat_index(struct Event *event, size_t row, size_t col) {
+  return (row - 1) * event->cols + col - 1;
+}
 
 int ems_init(unsigned int delay_ms) {
   if (event_list != NULL) {
@@ -87,7 +91,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     return 1;
   }
 
-  struct Event* event = malloc(sizeof(struct Event));
+  struct Event *event = malloc(sizeof(struct Event));
 
   if (event == NULL) {
     fprintf(stderr, "Error allocating memory for event\n");
@@ -120,13 +124,14 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   return 0;
 }
 
-int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {
+int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
+                size_t *ys) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
-  struct Event* event = get_event_with_delay(event_id);
+  struct Event *event = get_event_with_delay(event_id);
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
@@ -165,75 +170,72 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id, char* filePath, const char* directory_path) {
+int ems_show(unsigned int event_id, char *file_path) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
-  struct Event* event = get_event_with_delay(event_id);
+  struct Event *event = get_event_with_delay(event_id);
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
   }
 
-  // Encontrar o último índice da barra '/'
-  size_t lastIndex = strlen(filePath) - 1;
-  while (lastIndex > 0 && filePath[lastIndex] != '/') {
-      lastIndex--;
+  // Get file path for .out file
+  char *dot = strrchr(file_path, '.');
+  size_t length = (size_t)(dot - file_path);
+
+  char output_file_path[length + 5];
+  strncpy(output_file_path, file_path, length);
+  strcpy(output_file_path + length, ".out");
+
+  // Open in the file
+  int fd = open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC);
+
+  if (fd == -1) {
+    perror("Error opening file");
+    return 1;
   }
 
-  // Encontrar o índice do ponto '.' que indica a extensão
-  size_t dotIndex = lastIndex;
-  while (dotIndex < strlen(filePath) && filePath[dotIndex] != '.') {
-      dotIndex++;
-  }
+  // Write in the file
+  for (size_t i = 1; i <= event->rows; i++) {
+    for (size_t j = 1; j <= event->cols; j++) {
+      unsigned int *seat = get_seat_with_delay(event, seat_index(event, i, j));
+      char seat_str[12];
+      int len = snprintf(seat_str, sizeof(seat_str), "%u", *seat);
 
-  // Calcular o comprimento do nome do arquivo sem a extensão
-  size_t nameLength = dotIndex - lastIndex - 1;
+      if (write(fd, seat_str, (size_t)len) != len) {
+        fprintf(stderr, "Error writing to the file\n");
+        close(fd);
+        return 1;
+      }
 
-  char *fileName = (char *)malloc((nameLength + 1) * sizeof(char));
-  strncpy(fileName, filePath + lastIndex + 1, nameLength);
-  fileName[nameLength] = '\0';
-
-  char file[MAX_DIRECTORY];
-  snprintf(file, sizeof(file), "%s/%s.out", directory_path, fileName);
-
-  free(fileName);
-
-  int fdOut = open(file, O_WRONLY | O_CREAT, S_IRUSR);
-
-  // Verificar se o ficheiro foi criado
-  if (fdOut != -1) {
-
-    //Escrever a data no ficheiro
-    for (size_t i = 1; i <= event->rows; i++) {
-      for (size_t j = 1; j <= event->cols; j++) {
-        unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-        dprintf(fdOut, "%u", *seat);
-
-        if (j < event->cols) {
-          dprintf(fdOut, " ");
+      if (j < event->cols) {
+        if (write(fd, " ", sizeof(char)) != 1) {
+          fprintf(stderr, "Error writing to the file\n");
+          close(fd);
+          return 1;
         }
       }
-      dprintf(fdOut, "\n");
     }
 
-    // Verificar se a escrita foi bem-sucedida
-    if (close(fdOut) != 0) {
-      fprintf(stderr, "Could not write to the file\n");
-    }
-      close(fdOut);
-
-  } else {
-      fprintf(stderr, "Could not creat the file\n");
+    if (write(fd, "\n", sizeof(char)) != 1) {
+      fprintf(stderr, "Error writing to the file\n");
+      close(fd);
       return 1;
+    }
+  }
+
+  // Close file
+  if (close(fd) != 0) {
+    fprintf(stderr, "Could not close the file: %s\n", output_file_path);
+    return 1;
   }
 
   return 0;
 }
-
 
 int ems_list_events() {
   if (event_list == NULL) {
@@ -246,7 +248,7 @@ int ems_list_events() {
     return 0;
   }
 
-  struct ListNode* current = event_list->head;
+  struct ListNode *current = event_list->head;
   while (current != NULL) {
     printf("Event: ");
     printf("%u\n", (current->event)->id);
