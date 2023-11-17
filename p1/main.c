@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     }
     closedir(dir);
   } else {
-    fprintf(stderr, "Could not open the direcory\n");
+    fprintf(stderr, "Could not open the directory\n");
   }
 
   if (number_of_files == 0) {

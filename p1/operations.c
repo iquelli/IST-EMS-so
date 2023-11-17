@@ -2,7 +2,15 @@
 #include <stdlib.h>
 #include <time.h>
 
+// as que adicionei
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+
 #include "eventlist.h"
+
+// também adicionei
+#include "constants.h"
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -169,21 +177,42 @@ int ems_show(unsigned int event_id) {
     return 1;
   }
 
-  for (size_t i = 1; i <= event->rows; i++) {
-    for (size_t j = 1; j <= event->cols; j++) {
-      unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      printf("%u", *seat);
 
-      if (j < event->cols) {
-        printf(" ");
+  char file_name[MAX_DIRECTORY];
+  snprintf(file_name, sizeof(file_name), "%d.out", event_id);
+
+  int fdOut = open(file_name, O_WRONLY | O_CREAT, S_IRUSR);
+
+  // Verificar se o ficheiro foi criado
+  if (fdOut != -1) {
+
+    //Escrever a data no ficheiro
+    for (size_t i = 1; i <= event->rows; i++) {
+      for (size_t j = 1; j <= event->cols; j++) {
+        unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
+        dprintf(fdOut, "%u", *seat);
+
+        if (j < event->cols) {
+          dprintf(fdOut, " ");
+        }
       }
+      dprintf(fdOut, "\n");
     }
+    
+    // Verificar se a escrita foi bem-sucedida
+    if (close(fdOut) != 0) {
+      fprintf(stderr, "Error writing to file: %s\n", file_name);
+    }
+      close(fdOut);
 
-    printf("\n");
+  } else {
+      fprintf(stderr, "Error creating file: %s\n", file_name);
+      return 1;
   }
 
   return 0;
 }
+
 
 int ems_list_events() {
   if (event_list == NULL) {
