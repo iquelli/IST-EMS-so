@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <string.h>
 
 #include "eventlist.h"
 
@@ -164,7 +165,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id) {
+int ems_show(unsigned int event_id, char* filePath, const char* directory_path) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -177,11 +178,31 @@ int ems_show(unsigned int event_id) {
     return 1;
   }
 
+  // Encontrar o último índice da barra '/'
+  size_t lastIndex = strlen(filePath) - 1;
+  while (lastIndex > 0 && filePath[lastIndex] != '/') {
+      lastIndex--;
+  }
 
-  char file_name[MAX_DIRECTORY];
-  snprintf(file_name, sizeof(file_name), "%d.out", event_id);
+  // Encontrar o índice do ponto '.' que indica a extensão
+  size_t dotIndex = lastIndex;
+  while (dotIndex < strlen(filePath) && filePath[dotIndex] != '.') {
+      dotIndex++;
+  }
 
-  int fdOut = open(file_name, O_WRONLY | O_CREAT, S_IRUSR);
+  // Calcular o comprimento do nome do arquivo sem a extensão
+  size_t nameLength = dotIndex - lastIndex - 1;
+
+  char *fileName = (char *)malloc((nameLength + 1) * sizeof(char));
+  strncpy(fileName, filePath + lastIndex + 1, nameLength);
+  fileName[nameLength] = '\0';
+
+  char file[MAX_DIRECTORY];
+  snprintf(file, sizeof(file), "%s/%s.out", directory_path, fileName);
+
+  free(fileName);
+
+  int fdOut = open(file, O_WRONLY | O_CREAT, S_IRUSR);
 
   // Verificar se o ficheiro foi criado
   if (fdOut != -1) {
@@ -198,15 +219,15 @@ int ems_show(unsigned int event_id) {
       }
       dprintf(fdOut, "\n");
     }
-    
+
     // Verificar se a escrita foi bem-sucedida
     if (close(fdOut) != 0) {
-      fprintf(stderr, "Error writing to file: %s\n", file_name);
+      fprintf(stderr, "Could not write to the file\n");
     }
       close(fdOut);
 
   } else {
-      fprintf(stderr, "Error creating file: %s\n", file_name);
+      fprintf(stderr, "Could not creat the file\n");
       return 1;
   }
 

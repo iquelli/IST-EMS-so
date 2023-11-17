@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
           continue;
         }
 
-        if (ems_show(event_id)) {
+        if (ems_show(event_id, files[i], directory_path)) {
           fprintf(stderr, "Failed to show event\n");
         }
 
