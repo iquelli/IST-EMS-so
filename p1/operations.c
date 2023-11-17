@@ -192,7 +192,7 @@ int ems_show(unsigned int event_id, char *file_path) {
   strcpy(output_file_path + length, ".out");
 
   // Open in the file
-  int fd = open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC);
+  int fd = open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 
   if (fd == -1) {
     perror("Error opening file");
