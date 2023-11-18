@@ -1,16 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
-// as que adicionei
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "eventlist.h"
-
-// também adicionei
 #include "constants.h"
 
 static struct EventList *event_list = NULL;
@@ -195,7 +191,7 @@ int ems_show(unsigned int event_id, char *file_path) {
   int fd = open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 
   if (fd == -1) {
-    perror("Error opening file");
+    fprintf(stderr, "Error opening file");
     return 1;
   }
 
