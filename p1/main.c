@@ -93,7 +93,11 @@ int main(int argc, char *argv[]) {
 
     // Control active processes
     while (active_processes == max_proc + 1) {
-      if (wait(NULL) > 0) {
+      int status;
+      pid_t finished_pid = wait(&status);
+
+      if (finished_pid > 0) {
+        printf("Process %d has finish.\n", finished_pid);
         active_processes--;
       }
     }
@@ -101,9 +105,13 @@ int main(int argc, char *argv[]) {
 
   // Wait for all the child processes to complete
   while (active_processes > 0) {
-    if (wait(NULL) > 0) {
-      active_processes--;
-    }
+      int status;
+      pid_t finished_pid = wait(&status);
+
+      if (finished_pid > 0) {
+        printf("Process %d finished\n", finished_pid);
+        active_processes--;
+      }
   }
 
   // Free memory allocated
