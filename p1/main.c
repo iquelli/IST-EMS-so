@@ -1,18 +1,20 @@
+#include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-
-// as que adicionei
-#include <dirent.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
 
+char *files[MAX_FILES];
+int number_of_files = 0;
+
+int store_files(char *directory_path);
 int file_handler(char *directory_path);
 
 int main(int argc, char *argv[]) {
@@ -37,13 +39,72 @@ int main(int argc, char *argv[]) {
     state_access_delay_ms = (unsigned int)delay;
   }
 
-  const char *directory_path = argv[1];
+  if (store_files(argv[1]) == -1) {
+    fprintf(stderr, "Error retrieving files\n");
+    return 1;
+  }
+
+  if (ems_init(state_access_delay_ms)) {
+    fprintf(stderr, "Failed to initialize EMS\n");
+    return 1;
+  }
+
+  // Iterate through files
   int max_proc = atoi(argv[2]);
+  int active_processes = 0;
+  for (int i = 0; i < number_of_files; i++) {
 
-  char *files[MAX_FILES];
+    active_processes++;
+    pid_t pid = fork();
+    if (pid < 0) {
+      fprintf(stderr,
+              "There was an error creating a process to handle file from "
+              "directory path: %s\n",
+              files[i]);
+      exit(1);
+    }
+    if (pid == 0) {
+      exit(file_handler(files[i]) != 0);
+    }
 
+    // Control active processes
+    while (active_processes == max_proc + 1) {
+      int status;
+      pid_t finished_pid = wait(&status);
+
+      if (finished_pid > 0) {
+        printf("Process %d finished\n", finished_pid);
+        active_processes--;
+      }
+    }
+  }
+
+  // Wait for all the child processes to complete
+  while (active_processes > 0) {
+    int status;
+    pid_t finished_pid = wait(&status);
+
+    if (finished_pid > 0) {
+      printf("Process %d finished\n", finished_pid);
+      active_processes--;
+    }
+  }
+
+  // Free memory allocated
+  for (int i = 0; i < number_of_files; i++) {
+    free(files[i]);
+  }
+  printf("All child processes have terminated\n");
+
+  return 0;
+}
+
+/*
+  Retrieves files from the directory path given and stores them. Returns 0 if
+  successful, 1 otherwhise.
+*/
+int store_files(char *directory_path) {
   DIR *dir;
-  int number_of_files = 0;
   struct dirent *dir_entry;
 
   if ((dir = opendir(directory_path)) == NULL) {
@@ -67,59 +128,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "No '.jobs' files in the directory\n");
     return 1;
   }
-
-  if (ems_init(state_access_delay_ms)) {
-    fprintf(stderr, "Failed to initialize EMS\n");
-    return 1;
-  }
-
-  // Iterate through files
-  int active_processes = 0;
-  for (int i = 0; i < number_of_files; i++) {
-
-    active_processes++;
-    pid_t pid = fork();
-
-    if (pid < 0) {
-      fprintf(stderr,
-              "There was an error creating a process to handle file from "
-              "directory path: %s\n",
-              directory_path);
-      exit(1);
-    }
-    if (pid == 0) {
-      exit(file_handler(files[i]) != 0);
-    }
-
-    // Control active processes
-    while (active_processes == max_proc + 1) {
-      int status;
-      pid_t finished_pid = wait(&status);
-
-      if (finished_pid > 0) {
-        printf("Process %d has finish.\n", finished_pid);
-        active_processes--;
-      }
-    }
-  }
-
-  // Wait for all the child processes to complete
-  while (active_processes > 0) {
-      int status;
-      pid_t finished_pid = wait(&status);
-
-      if (finished_pid > 0) {
-        printf("Process %d finished\n", finished_pid);
-        active_processes--;
-      }
-  }
-
-  // Free memory allocated
-  for (int i = 0; i < number_of_files; i++) {
-    free(files[i]);
-  }
-
-  printf("All child processes have terminated.\n");
 
   return 0;
 }

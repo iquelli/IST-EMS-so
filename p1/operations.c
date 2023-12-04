@@ -1,13 +1,13 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
-#include "eventlist.h"
 #include "constants.h"
+#include "eventlist.h"
 
 static struct EventList *event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -188,7 +188,8 @@ int ems_show(unsigned int event_id, char *file_path) {
   strcpy(output_file_path + length, ".out");
 
   // Open in the file
-  int fd = open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  int fd =
+      open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 
   if (fd == -1) {
     fprintf(stderr, "Error opening file");
