@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
+#include "utils.h"
 
 #include "constants.h"
 #include "operations.h"
@@ -13,23 +16,30 @@
 
 char *files[MAX_FILES];
 int number_of_files = 0;
+int MAX_THREADS;
+int number_of_threads = 0;
 
+pthread_mutex_t ems_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_barrier_t barrier;
+int barrier_counter = 0;
+
+void *thread_function(void *arg);
 int store_files(char *directory_path);
 int file_handler(char *directory_path);
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
 
-  if (argc < 3) { // check if the input has at least 2 fields.
+  if (argc < 4) { // check if the input has at least 2 fields.
     fprintf(stderr,
-            "Usage: %s <directory_path> <max processes> <(optional) delay>\n",
+            "Usage: %s <directory_path> <max processes> <max threads> <(optional) delay>\n",
             argv[0]);
     return 1;
   }
 
-  if (argc > 3) { // in case a delay was specified
+  if (argc > 4) { // in case a delay was specified
     char *endptr;
-    unsigned long int delay = strtoul(argv[3], &endptr, 10);
+    unsigned long int delay = strtoul(argv[4], &endptr, 10);
 
     if (*endptr != '\0' || delay > UINT_MAX) {
       fprintf(stderr, "Invalid delay value or value too large\n");
@@ -51,6 +61,14 @@ int main(int argc, char *argv[]) {
 
   // Iterate through files
   int max_proc = atoi(argv[2]);
+  int in_threads = atoi(argv[3]);
+  MAX_THREADS = in_threads;
+
+  if (pthread_barrier_init(&barrier, NULL,(unsigned int) MAX_THREADS) != 0) {
+    fprintf(stderr, "Error initializing barrier\n");
+    return 1;
+  }
+
   int active_processes = 0;
   for (int i = 0; i < number_of_files; i++) {
 
@@ -89,6 +107,8 @@ int main(int argc, char *argv[]) {
       active_processes--;
     }
   }
+
+  pthread_barrier_destroy(&barrier);
 
   // Free memory allocated
   for (int i = 0; i < number_of_files; i++) {
@@ -133,16 +153,52 @@ int store_files(char *directory_path) {
 }
 
 /*
-  Processes '.jobs' files. Returns 0 if successful, 1 otherwhise.
+  Handles the file given. Returns 0 if successful, 1 otherwhise.
 */
 int file_handler(char *directory_path) {
+  pthread_t threads[MAX_THREADS];
 
+  while (1) {
+    // Create a thread if the maximum number of threads is not reached
+    if (number_of_threads < MAX_THREADS) {
+      if (pthread_create(&threads[number_of_threads], NULL, thread_function, (void *)directory_path) != 0) {
+        fprintf(stderr, "Error creating thread for file: %s\n", directory_path);
+        exit(1);
+      }
+      number_of_threads++;
+    }
+
+    // Check for finished threads and join them
+    for (int i = 0; i < number_of_threads; i++) {
+      if (pthread_join(threads[i], NULL) != 0) {
+        fprintf(stderr, "Error joining thread\n");
+        exit(1);
+      } else {
+        // Thread finished, decrement the counter
+        number_of_threads--;
+      }
+    }
+
+    // Check for completion of all threads
+    if (number_of_threads == 0) {
+      break;
+    }
+  }
+
+  return 0;
+}
+
+/*
+  Thread function. Handles the commands from the file given.
+*/
+void *thread_function(void *arg) {
+  char *directory_path = (char *)arg;
   int fd = open(directory_path, O_RDONLY);
 
   if (fd == -1) {
     fprintf(stderr, "Could not open file from the directory path %s\n",
             directory_path);
-    return 1;
+    pthread_exit(NULL);
   }
 
   int command;
@@ -226,17 +282,31 @@ int file_handler(char *directory_path) {
 
       break;
 
-    case CMD_BARRIER: // Not implemented
+    case CMD_BARRIER:
+      pthread_mutex_lock(&ems_mutex);
+      barrier_counter++;
+      pthread_mutex_unlock(&ems_mutex);
+
+      // Wait for all threads to reach the barrier
+      pthread_barrier_wait(&barrier);
+
+      // Only the last thread should reset the counter
+      pthread_mutex_lock(&ems_mutex);
+      if (barrier_counter == MAX_THREADS) {
+        barrier_counter = 0;
+      }
+      pthread_mutex_unlock(&ems_mutex);
+      break;
+
     case CMD_EMPTY:
       break;
 
     case EOC:
       ems_terminate();
-      return 0;
+      pthread_exit(NULL);
     }
   }
 
   close(fd);
-
-  return 0;
+  pthread_exit(NULL);
 }
