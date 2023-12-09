@@ -19,9 +19,14 @@ int number_of_files = 0;
 int MAX_THREADS;
 int number_of_threads = 0;
 
-pthread_mutex_t ems_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_barrier_t barrier;
 int barrier_counter = 0;
+
+struct ThreadArgs {
+  int fd;
+  int fd_out;
+  unsigned int thread_id;
+};
 
 void *thread_function(void *arg);
 int store_files(char *directory_path);
@@ -64,11 +69,6 @@ int main(int argc, char *argv[]) {
   int in_threads = atoi(argv[3]);
   MAX_THREADS = in_threads;
 
-  if (pthread_barrier_init(&barrier, NULL,(unsigned int) MAX_THREADS) != 0) {
-    fprintf(stderr, "Error initializing barrier\n");
-    return 1;
-  }
-
   int active_processes = 0;
   for (int i = 0; i < number_of_files; i++) {
 
@@ -107,8 +107,6 @@ int main(int argc, char *argv[]) {
       active_processes--;
     }
   }
-
-  pthread_barrier_destroy(&barrier);
 
   // Free memory allocated
   for (int i = 0; i < number_of_files; i++) {
@@ -157,11 +155,39 @@ int store_files(char *directory_path) {
 */
 int file_handler(char *directory_path) {
   pthread_t threads[MAX_THREADS];
+  struct ThreadArgs args[MAX_THREADS];
+
+  int fd = open(directory_path, O_RDONLY);
+
+  if (fd == -1) {
+    fprintf(stderr, "Could not open file from the directory path %s\n",
+            directory_path);
+    pthread_exit(NULL);
+  }
+
+  char *dot = strrchr(directory_path, '.');
+  size_t length = (size_t)(dot - directory_path);
+
+  char output_file_path[length + 5];
+  strncpy(output_file_path, directory_path, length);
+  strcpy(output_file_path + length, ".out");
+
+  int fd_out =
+      open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+
+  if (fd_out == -1) {
+    fprintf(stderr, "Error opening file");
+    pthread_exit(NULL);
+  }
 
   while (1) {
     // Create a thread if the maximum number of threads is not reached
     if (number_of_threads < MAX_THREADS) {
-      if (pthread_create(&threads[number_of_threads], NULL, thread_function, (void *)directory_path) != 0) {
+      args->fd = fd;
+      args->fd_out = fd_out;
+      args->thread_id = (unsigned int) number_of_threads;
+      
+      if (pthread_create(&threads[number_of_threads], NULL, thread_function, (void *)&args[number_of_threads]) != 0) {
         fprintf(stderr, "Error creating thread for file: %s\n", directory_path);
         exit(1);
       }
@@ -192,41 +218,19 @@ int file_handler(char *directory_path) {
   Thread function. Handles the commands from the file given.
 */
 void *thread_function(void *arg) {
-  char *directory_path = (char *)arg;
-  int fd = open(directory_path, O_RDONLY);
-
-  if (fd == -1) {
-    fprintf(stderr, "Could not open file from the directory path %s\n",
-            directory_path);
-    pthread_exit(NULL);
-  }
-
-  // Get file path for .out file
-  char *dot = strrchr(directory_path, '.');
-  size_t length = (size_t)(dot - directory_path);
-
-  char output_file_path[length + 5];
-  strncpy(output_file_path, directory_path, length);
-  strcpy(output_file_path + length, ".out");
-
-  // Open in the file
-  int fd_out =
-      open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-
-  if (fd_out == -1) {
-    fprintf(stderr, "Error opening file");
-    pthread_exit(NULL);
-  }
+  struct ThreadArgs *args = (struct ThreadArgs *)arg;
+  pthread_mutex_t ems_mutex;
+  mutex_init(&ems_mutex);
 
   int command;
-  while ((command = get_next(fd)) != EOC) {
-    unsigned int event_id, delay;
+  while ((command = get_next(args->fd)) != EOC) {
+    unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
 
     switch (command) {
     case CMD_CREATE:
-      if (parse_create(fd, &event_id, &num_rows, &num_columns) != 0) {
+      if (parse_create(args->fd, &event_id, &num_rows, &num_columns) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
@@ -238,7 +242,7 @@ void *thread_function(void *arg) {
       break;
 
     case CMD_RESERVE:
-      num_coords = parse_reserve(fd, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+      num_coords = parse_reserve(args->fd, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -252,31 +256,31 @@ void *thread_function(void *arg) {
       break;
 
     case CMD_SHOW:
-      if (parse_show(fd, &event_id) != 0) {
+      if (parse_show(args->fd, &event_id) != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
 
-      if (ems_show(event_id, fd_out)) {
+      if (ems_show(event_id, args->fd_out)) {
         fprintf(stderr, "Failed to show event\n");
       }
 
       break;
 
     case CMD_LIST_EVENTS:
-      if (ems_list_events(fd_out)) {
+      if (ems_list_events(args->fd_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
 
       break;
 
     case CMD_WAIT:
-      if (parse_wait(fd, &delay, NULL) == -1) { // thread_id is not implemented
+      if (parse_wait(args->fd, &delay, &thread_id) == -1) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
 
-      if (delay > 0) {
+      if (delay > 0 && (args->thread_id == thread_id || thread_id == 0)) {
         printf("Waiting...\n");
         ems_wait(delay);
       }
@@ -300,19 +304,25 @@ void *thread_function(void *arg) {
       break;
 
     case CMD_BARRIER:
-      pthread_mutex_lock(&ems_mutex);
+      if (pthread_barrier_init(&barrier, NULL,(unsigned int) number_of_threads) != 0) {
+        fprintf(stderr, "Error initializing barrier\n");
+        pthread_exit(NULL);
+      }
+      mutex_lock(&ems_mutex);
       barrier_counter++;
-      pthread_mutex_unlock(&ems_mutex);
+      mutex_unlock(&ems_mutex);
 
       // Wait for all threads to reach the barrier
+      sleep(1);
       pthread_barrier_wait(&barrier);
 
       // Only the last thread should reset the counter
-      pthread_mutex_lock(&ems_mutex);
-      if (barrier_counter == number_of_threads) {
+      mutex_lock(&ems_mutex);
+      if (barrier_counter == number_of_threads + 1) {
+        pthread_barrier_destroy(&barrier);
         barrier_counter = 0;
       }
-      pthread_mutex_unlock(&ems_mutex);
+      mutex_unlock(&ems_mutex);
       break;
 
     case CMD_EMPTY:
@@ -324,11 +334,12 @@ void *thread_function(void *arg) {
     }
   }
   // Close file
-  if (close(fd_out) != 0) {
-    fprintf(stderr, "Could not close the file: %s\n", output_file_path);
+  if (close(args->fd_out) != 0) {
+    fprintf(stderr, "Could not close the file\n");
     pthread_exit(NULL);
   }
 
-  close(fd);
+  close(args->fd);
+  mutex_destroy(&ems_mutex);
   pthread_exit(NULL);
 }

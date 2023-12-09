@@ -8,6 +8,7 @@
 
 #include "constants.h"
 #include "eventlist.h"
+#include "utils.h"
 
 static struct EventList *event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -228,23 +229,30 @@ int ems_list_events(int fd) {
 
   struct ListNode *current = event_list->head;
   while (current != NULL) {
-    const char *no_events_message = "Event: ";
-    if (write(fd, no_events_message, 8) != 8) {
+    const char *event_message = "Event: ";
+    ssize_t result = write(fd, event_message, strlen(event_message));
+    if (result < 0 || (size_t)result != strlen(event_message)) {
       fprintf(stderr, "Error writing to the file\n");
       close(fd);
       return 1;
     }
-    if (write(fd, &current->event->id, sizeof(unsigned int)) !=
-        sizeof(unsigned int)) {
+
+    unsigned int event_id = current->event->id;
+    char event_id_str[12];
+    int len = snprintf(event_id_str, sizeof(event_id_str), "%u", event_id);
+    result = write(fd, event_id_str, (size_t)len);
+    if (result < 0 || (size_t)result != (size_t)len) {
       fprintf(stderr, "Error writing to the file\n");
       close(fd);
       return 1;
     }
+
     if (write(fd, "\n", sizeof(char)) != 1) {
       fprintf(stderr, "Error writing to the file\n");
       close(fd);
       return 1;
     }
+
     current = current->next;
   }
 
