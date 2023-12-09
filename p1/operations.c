@@ -166,7 +166,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
   return 0;
 }
 
-int ems_show(unsigned int event_id, char *file_path) {
+int ems_show(unsigned int event_id, int fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -176,23 +176,6 @@ int ems_show(unsigned int event_id, char *file_path) {
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
-    return 1;
-  }
-
-  // Get file path for .out file
-  char *dot = strrchr(file_path, '.');
-  size_t length = (size_t)(dot - file_path);
-
-  char output_file_path[length + 5];
-  strncpy(output_file_path, file_path, length);
-  strcpy(output_file_path + length, ".out");
-
-  // Open in the file
-  int fd =
-      open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-
-  if (fd == -1) {
-    fprintf(stderr, "Error opening file");
     return 1;
   }
 
@@ -224,31 +207,44 @@ int ems_show(unsigned int event_id, char *file_path) {
       return 1;
     }
   }
-
-  // Close file
-  if (close(fd) != 0) {
-    fprintf(stderr, "Could not close the file: %s\n", output_file_path);
-    return 1;
-  }
-
+  
   return 0;
 }
 
-int ems_list_events() {
+int ems_list_events(int fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
   if (event_list->head == NULL) {
-    printf("No events\n");
-    return 0;
+    const char *no_events_message = "No events\n";
+    if (write(fd, no_events_message, 10) != 10) {
+      fprintf(stderr, "Error writing to the file\n");
+      close(fd);
+      return 1;
+    }
   }
 
   struct ListNode *current = event_list->head;
   while (current != NULL) {
-    printf("Event: ");
-    printf("%u\n", (current->event)->id);
+    const char *no_events_message = "Event: ";
+    if (write(fd, no_events_message, 8) != 8) {
+      fprintf(stderr, "Error writing to the file\n");
+      close(fd);
+      return 1;
+    }
+    if (write(fd, &current->event->id, sizeof(unsigned int)) !=
+        sizeof(unsigned int)) {
+      fprintf(stderr, "Error writing to the file\n");
+      close(fd);
+      return 1;
+    }
+    if (write(fd, "\n", sizeof(char)) != 1) {
+      fprintf(stderr, "Error writing to the file\n");
+      close(fd);
+      return 1;
+    }
     current = current->next;
   }
 

@@ -30,7 +30,7 @@ int file_handler(char *directory_path);
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
 
-  if (argc < 4) { // check if the input has at least 2 fields.
+  if (argc < 4) { // check if the input has at least 3 fields.
     fprintf(stderr,
             "Usage: %s <directory_path> <max processes> <max threads> <(optional) delay>\n",
             argv[0]);
@@ -201,6 +201,23 @@ void *thread_function(void *arg) {
     pthread_exit(NULL);
   }
 
+  // Get file path for .out file
+  char *dot = strrchr(directory_path, '.');
+  size_t length = (size_t)(dot - directory_path);
+
+  char output_file_path[length + 5];
+  strncpy(output_file_path, directory_path, length);
+  strcpy(output_file_path + length, ".out");
+
+  // Open in the file
+  int fd_out =
+      open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+
+  if (fd_out == -1) {
+    fprintf(stderr, "Error opening file");
+    pthread_exit(NULL);
+  }
+
   int command;
   while ((command = get_next(fd)) != EOC) {
     unsigned int event_id, delay;
@@ -240,14 +257,14 @@ void *thread_function(void *arg) {
         continue;
       }
 
-      if (ems_show(event_id, directory_path)) {
+      if (ems_show(event_id, fd_out)) {
         fprintf(stderr, "Failed to show event\n");
       }
 
       break;
 
     case CMD_LIST_EVENTS:
-      if (ems_list_events()) {
+      if (ems_list_events(fd_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
 
@@ -292,7 +309,7 @@ void *thread_function(void *arg) {
 
       // Only the last thread should reset the counter
       pthread_mutex_lock(&ems_mutex);
-      if (barrier_counter == MAX_THREADS) {
+      if (barrier_counter == number_of_threads) {
         barrier_counter = 0;
       }
       pthread_mutex_unlock(&ems_mutex);
@@ -305,6 +322,11 @@ void *thread_function(void *arg) {
       ems_terminate();
       pthread_exit(NULL);
     }
+  }
+  // Close file
+  if (close(fd_out) != 0) {
+    fprintf(stderr, "Could not close the file: %s\n", output_file_path);
+    pthread_exit(NULL);
   }
 
   close(fd);
