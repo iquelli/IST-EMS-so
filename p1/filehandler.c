@@ -149,21 +149,23 @@ int process_job_file(char *directory_path, int max_threads) {
 void *execute_file_commands(void *thread) {
   struct ThreadArgs *thread_args = (struct ThreadArgs *)thread;
 
+  mutex_lock(&thread_args->file->file_mutex);
   int command = get_next(thread_args->file->fd);
-  // mutex_lock(&thread_args->file->file_mutex);
   while (command != EOC) {
+
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
 
     switch (command) {
     case CMD_CREATE:
-      if (parse_create(thread_args->file->fd, &event_id, &num_rows,
-                       &num_columns) != 0) {
+      int a = parse_create(thread_args->file->fd, &event_id, &num_rows,
+                           &num_columns);
+      mutex_unlock(&thread_args->file->file_mutex);
+      if (a != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
-      // mutex_unlock(&thread_args->file->file_mutex);
 
       if (ems_create(event_id, num_rows, num_columns)) {
         fprintf(stderr, "Failed to create event\n");
@@ -174,7 +176,7 @@ void *execute_file_commands(void *thread) {
     case CMD_RESERVE:
       num_coords = parse_reserve(thread_args->file->fd, MAX_RESERVATION_SIZE,
                                  &event_id, xs, ys);
-      // mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file->file_mutex);
 
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -187,11 +189,12 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_SHOW:
-      if (parse_show(thread_args->file->fd, &event_id) != 0) {
+      int b = parse_show(thread_args->file->fd, &event_id);
+      mutex_unlock(&thread_args->file->file_mutex);
+      if (b != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
-      // mutex_unlock(&thread_args->file->file_mutex);
       if (ems_show(event_id, thread_args->file->fd_out)) {
         fprintf(stderr, "Failed to show event\n");
       }
@@ -199,18 +202,20 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_LIST_EVENTS:
+      mutex_unlock(&thread_args->file->file_mutex);
       if (ems_list_events(thread_args->file->fd_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
-      // mutex_unlock(&thread_args->file->file_mutex);
       break;
 
     case CMD_WAIT:
-      if (parse_wait(thread_args->file->fd, &delay, &thread_id) == -1) {
+      int c = parse_wait(thread_args->file->fd, &delay, &thread_id);
+      mutex_unlock(&thread_args->file->file_mutex);
+
+      if (c == -1) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
-      // mutex_unlock(&thread_args->file->file_mutex);
 
       if (delay > 0 &&
           (thread_args->thread_id == thread_id || thread_id == 0)) {
@@ -221,8 +226,8 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_INVALID:
+      mutex_unlock(&thread_args->file->file_mutex);
       fprintf(stderr, "Invalid command. See HELP for usage\n");
-      // mutex_unlock(&thread_args->file->file_mutex);
       break;
 
     case CMD_HELP:
@@ -234,28 +239,28 @@ void *execute_file_commands(void *thread) {
              "  WAIT <delay_ms> [thread_id]\n" // thread_id is not implemented
              "  BARRIER\n"                     // Not implemented
              "  HELP\n");
-      // mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file->file_mutex);
       break;
 
     case CMD_BARRIER:
-      // mutex_unlock(&thread_args->file->file_mutex);
-
+      mutex_unlock(&thread_args->file->file_mutex);
       break;
 
     case CMD_EMPTY:
-      // mutex_unlock(&thread_args->file->file_mutex);
-
+      mutex_unlock(&thread_args->file->file_mutex);
       break;
 
     case EOC:
       ems_terminate();
-      // mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file->file_mutex);
       pthread_exit(NULL);
     }
 
-    // get next command
+    // lock before getting next command
+    mutex_lock(&thread_args->file->file_mutex);
     command = get_next(thread_args->file->fd);
-    // mutex_lock(&thread_args->file->file_mutex);
   }
+
+  mutex_unlock(&thread_args->file->file_mutex);
   pthread_exit(NULL);
 }
