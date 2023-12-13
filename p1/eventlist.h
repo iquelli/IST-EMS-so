@@ -1,8 +1,8 @@
 #ifndef EVENT_LIST_H
 #define EVENT_LIST_H
 
-#include <stddef.h>
 #include <pthread.h>
+#include <stddef.h>
 
 struct Event {
   unsigned int id;           /// Event id
@@ -14,6 +14,7 @@ struct Event {
   unsigned int
       *data; /// Array of size rows * cols with the reservations for each seat.
 
+  pthread_mutex_t event_mutex;
   pthread_rwlock_t lock; /// Lock for the event.
 };
 
@@ -26,6 +27,7 @@ struct ListNode {
 struct EventList {
   struct ListNode *head; // Head of the list
   struct ListNode *tail; // Tail of the list
+
   pthread_rwlock_t lock_list;
 };
 

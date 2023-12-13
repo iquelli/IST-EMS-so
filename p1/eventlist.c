@@ -9,7 +9,7 @@ struct EventList *create_list() {
     return NULL;
 
   if (pthread_rwlock_init(&list->lock_list, NULL) != 0) {
-      exit(EXIT_FAILURE);
+    exit(EXIT_FAILURE);
   }
   list->head = NULL;
   list->tail = NULL;
