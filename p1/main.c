@@ -8,7 +8,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "utils.h"
 
 #include "constants.h"
 #include "operations.h"
@@ -16,21 +15,18 @@
 
 char *files[MAX_FILES];
 int number_of_files = 0;
-int MAX_THREADS;
 int number_of_threads = 0;
-
-pthread_barrier_t barrier;
-int barrier_counter = 0;
 
 struct ThreadArgs {
   int fd;
   int fd_out;
+  int max_threads;
   unsigned int thread_id;
 };
 
 void *thread_function(void *arg);
 int store_files(char *directory_path);
-int file_handler(char *directory_path);
+int file_handler(char *directory_path, int max_threads);
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
@@ -66,8 +62,7 @@ int main(int argc, char *argv[]) {
 
   // Iterate through files
   int max_proc = atoi(argv[2]);
-  int in_threads = atoi(argv[3]);
-  MAX_THREADS = in_threads;
+  int max_threads = atoi(argv[3]);
 
   int active_processes = 0;
   for (int i = 0; i < number_of_files; i++) {
@@ -82,7 +77,7 @@ int main(int argc, char *argv[]) {
       exit(1);
     }
     if (pid == 0) {
-      exit(file_handler(files[i]) != 0);
+      exit(file_handler(files[i], max_threads) != 0);
     }
 
     // Control active processes
@@ -91,7 +86,7 @@ int main(int argc, char *argv[]) {
       pid_t finished_pid = wait(&status);
 
       if (finished_pid > 0) {
-        printf("Process %d finished\n", finished_pid);
+        printf("Child process %d finished with state %d\n", finished_pid, WEXITSTATUS(status));
         active_processes--;
       }
     }
@@ -103,7 +98,7 @@ int main(int argc, char *argv[]) {
     pid_t finished_pid = wait(&status);
 
     if (finished_pid > 0) {
-      printf("Process %d finished\n", finished_pid);
+      printf("Child process %d finished with state %d\n", finished_pid, WEXITSTATUS(status));
       active_processes--;
     }
   }
@@ -153,16 +148,15 @@ int store_files(char *directory_path) {
 /*
   Handles the file given. Returns 0 if successful, 1 otherwhise.
 */
-int file_handler(char *directory_path) {
-  pthread_t threads[MAX_THREADS];
-  struct ThreadArgs args[MAX_THREADS];
+int file_handler(char *directory_path, int max_threads) {
+  pthread_t threads[max_threads];
+  struct ThreadArgs args[max_threads];
 
   int fd = open(directory_path, O_RDONLY);
 
   if (fd == -1) {
-    fprintf(stderr, "Could not open file from the directory path %s\n",
-            directory_path);
-    pthread_exit(NULL);
+    fprintf(stderr, "Error opening file");
+    return 1;
   }
 
   char *dot = strrchr(directory_path, '.');
@@ -172,45 +166,46 @@ int file_handler(char *directory_path) {
   strncpy(output_file_path, directory_path, length);
   strcpy(output_file_path + length, ".out");
 
-  int fd_out =
-      open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  int fd_out = open(output_file_path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 
   if (fd_out == -1) {
     fprintf(stderr, "Error opening file");
-    pthread_exit(NULL);
+    close(fd);
+    return 1;
   }
 
-  while (1) {
-    // Create a thread if the maximum number of threads is not reached
-    if (number_of_threads < MAX_THREADS) {
-      args->fd = fd;
-      args->fd_out = fd_out;
-      args->thread_id = (unsigned int) number_of_threads;
-      
-      if (pthread_create(&threads[number_of_threads], NULL, thread_function, (void *)&args[number_of_threads]) != 0) {
-        fprintf(stderr, "Error creating thread for file: %s\n", directory_path);
-        exit(1);
-      }
-      number_of_threads++;
-    }
+  // Create threads
+  for (int i = 0; i < max_threads; i++) {
+    args[i].fd = fd;
+    args[i].fd_out = fd_out;
+    args[i].max_threads = max_threads;
+    args[i].thread_id = (unsigned int) i;
 
-    // Check for finished threads and join them
-    for (int i = 0; i < number_of_threads; i++) {
-      if (pthread_join(threads[i], NULL) != 0) {
-        fprintf(stderr, "Error joining thread\n");
-        exit(1);
-      } else {
-        // Thread finished, decrement the counter
-        number_of_threads--;
-      }
-    }
-
-    // Check for completion of all threads
-    if (number_of_threads == 0) {
-      break;
+    if (pthread_create(&threads[i], NULL, thread_function, (void *)&args[i]) != 0) {
+      fprintf(stderr, "Error creating thread");
+      close(fd_out);
+      close(fd);
+      return 1;
     }
   }
 
+  // Join threads
+  for (int i = 0; i < max_threads; i++) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      fprintf(stderr, "Error joining thread\n");
+      close(fd_out);
+      close(fd);
+      return 1;
+    }
+  }
+
+  if (close(fd_out) != 0) {
+    fprintf(stderr, "Could not close the file\n");
+    close(fd);
+    return 1;
+  }
+
+  close(fd);
   return 0;
 }
 
@@ -219,8 +214,7 @@ int file_handler(char *directory_path) {
 */
 void *thread_function(void *arg) {
   struct ThreadArgs *args = (struct ThreadArgs *)arg;
-  pthread_mutex_t ems_mutex;
-  mutex_init(&ems_mutex);
+
 
   int command;
   while ((command = get_next(args->fd)) != EOC) {
@@ -252,7 +246,6 @@ void *thread_function(void *arg) {
       if (ems_reserve(event_id, num_coords, xs, ys)) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
-
       break;
 
     case CMD_SHOW:
@@ -260,7 +253,6 @@ void *thread_function(void *arg) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
-
       if (ems_show(event_id, args->fd_out)) {
         fprintf(stderr, "Failed to show event\n");
       }
@@ -304,25 +296,6 @@ void *thread_function(void *arg) {
       break;
 
     case CMD_BARRIER:
-      if (pthread_barrier_init(&barrier, NULL,(unsigned int) number_of_threads) != 0) {
-        fprintf(stderr, "Error initializing barrier\n");
-        pthread_exit(NULL);
-      }
-      mutex_lock(&ems_mutex);
-      barrier_counter++;
-      mutex_unlock(&ems_mutex);
-
-      // Wait for all threads to reach the barrier
-      sleep(1);
-      pthread_barrier_wait(&barrier);
-
-      // Only the last thread should reset the counter
-      mutex_lock(&ems_mutex);
-      if (barrier_counter == number_of_threads + 1) {
-        pthread_barrier_destroy(&barrier);
-        barrier_counter = 0;
-      }
-      mutex_unlock(&ems_mutex);
       break;
 
     case CMD_EMPTY:
@@ -333,13 +306,5 @@ void *thread_function(void *arg) {
       pthread_exit(NULL);
     }
   }
-  // Close file
-  if (close(args->fd_out) != 0) {
-    fprintf(stderr, "Could not close the file\n");
-    pthread_exit(NULL);
-  }
-
-  close(args->fd);
-  mutex_destroy(&ems_mutex);
   pthread_exit(NULL);
 }
