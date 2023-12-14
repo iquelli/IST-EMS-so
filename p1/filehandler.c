@@ -16,6 +16,7 @@
 #include "utils.h"
 
 pthread_mutex_t file_mutex;
+int BARRIER = TRUE;
 
 int retrieve_job_files(char *directory_path, char *files[], int *num_of_files) {
   DIR *dir;
@@ -96,7 +97,10 @@ int process_job_file(char *directory_path, int max_threads) {
 
   mutex_init(&file->file_mutex);
 
-  // Create threads
+  while (BARRIER) {
+    BARRIER = FALSE; // reset barrier
+
+    // Create threads
   for (int i = 0; i < max_threads; i++) {
     struct ThreadArgs *thread_args = malloc(sizeof(struct ThreadArgs));
     if (thread_args == NULL) {
@@ -131,6 +135,7 @@ int process_job_file(char *directory_path, int max_threads) {
     if (pthread_join(file->threads[i], NULL) != 0) {
       perror("Error joining thread");
     }
+  }
   }
 
   if (close(file->fd_out) != 0) {
@@ -247,8 +252,9 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_BARRIER:
+      BARRIER = TRUE;
       mutex_unlock(&thread_args->file->file_mutex);
-      break;
+      pthread_exit(NULL);
 
     case CMD_EMPTY:
       mutex_unlock(&thread_args->file->file_mutex);
