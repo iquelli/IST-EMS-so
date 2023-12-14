@@ -3,11 +3,13 @@
 
 #define TRUE 1
 #define FALSE 0
+#define MAX_THREADS 10
 
 struct JobFile {
   int fd;
   int fd_out;
   int max_threads;
+  unsigned int wait_time[MAX_THREADS];
   pthread_t *threads;
   pthread_mutex_t file_mutex;
 };

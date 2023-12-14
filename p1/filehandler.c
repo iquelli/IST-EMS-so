@@ -17,6 +17,7 @@
 
 pthread_mutex_t file_mutex;
 int BARRIER = TRUE;
+int WAIT = FALSE;
 
 int retrieve_job_files(char *directory_path, char *files[], int *num_of_files) {
   DIR *dir;
@@ -118,6 +119,7 @@ int process_job_file(char *directory_path, int max_threads) {
       }
       thread_args->file = file;
       thread_args->thread_id = (unsigned int)i;
+      thread_args->file->wait_time[i] = 0;
 
       if (pthread_create(&file->threads[i], NULL, execute_file_commands,
                          (void *)thread_args) != 0) {
@@ -156,18 +158,29 @@ void *execute_file_commands(void *thread) {
 
   mutex_lock(&thread_args->file->file_mutex);
   int command = get_next(thread_args->file->fd);
-  while (command != EOC) {
 
+  while (command != EOC) {
+    
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
     int result;
 
+    if (WAIT == TRUE) {
+      for (int i = 0; i < thread_args->file->max_threads; i++) {
+        if (thread_args->file->wait_time[i] > 0) {
+          printf("Waiting...\n");
+          ems_wait(thread_args->file->wait_time[i]);
+          thread_args->file->wait_time[i] = 0;
+        }
+      }
+      WAIT = FALSE;
+    }
+
     switch (command) {
     case CMD_CREATE:
       result = parse_create(thread_args->file->fd, &event_id, &num_rows,
                             &num_columns);
-
       if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         mutex_unlock(&thread_args->file->file_mutex);
@@ -178,7 +191,6 @@ void *execute_file_commands(void *thread) {
         fprintf(stderr, "Failed to create event\n");
       }
 
-      // create command always has to reach the end
       mutex_unlock(&thread_args->file->file_mutex);
 
       break;
@@ -214,7 +226,6 @@ void *execute_file_commands(void *thread) {
 
     case CMD_LIST_EVENTS:
       mutex_unlock(&thread_args->file->file_mutex);
-
       if (ems_list_events(thread_args->file->fd_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
@@ -229,10 +240,14 @@ void *execute_file_commands(void *thread) {
         continue;
       }
 
-      if (delay > 0 &&
-          (thread_args->thread_id == thread_id || thread_id == 0)) {
-        printf("Waiting...\n");
-        ems_wait(delay);
+      WAIT = TRUE;
+      if (delay > 0 && thread_id == 0) {
+        for (int i = 0; i < thread_args->file->max_threads; i++) {
+          thread_args->file->wait_time[i] = delay;
+        }
+
+      } else if (delay > 0 && thread_id > 0) {
+        thread_args->file->wait_time[thread_id-1] = delay;
       }
 
       break;
@@ -255,7 +270,7 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_BARRIER:
-      BARRIER = TRUE;
+      BARRIER = 1;  // Set termination cause to BARRIER
       mutex_unlock(&thread_args->file->file_mutex);
       pthread_exit(NULL);
 
