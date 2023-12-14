@@ -17,7 +17,7 @@ struct EventList *create_list() {
 }
 
 int append_to_list(struct EventList *list, struct Event *event) {
-  rwlock_wrlock(&list->lock_list);
+  rwlock_rdlock(&list->lock_list);
   if (!list) {
     rwlock_unlock(&list->lock_list);
     return 1;
@@ -49,6 +49,8 @@ static void free_event(struct Event *event) {
   if (!event)
     return;
 
+  rwlock_destroy(&event->lock);
+
   free(event->data);
   free(event);
 }
@@ -70,9 +72,7 @@ void free_list(struct EventList *list) {
 }
 
 struct Event *get_event(struct EventList *list, unsigned int event_id) {
-  rwlock_rdlock(&list->lock_list);
   if (!list) {
-    rwlock_unlock(&list->lock_list);
     return NULL;
   }
 
@@ -80,12 +80,10 @@ struct Event *get_event(struct EventList *list, unsigned int event_id) {
   while (current) {
     struct Event *event = current->event;
     if (event->id == event_id) {
-      rwlock_unlock(&list->lock_list);
       return event;
     }
     current = current->next;
   }
 
-  rwlock_unlock(&list->lock_list);
   return NULL;
 }
