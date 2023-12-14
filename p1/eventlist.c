@@ -17,16 +17,13 @@ struct EventList *create_list() {
 }
 
 int append_to_list(struct EventList *list, struct Event *event) {
-  rwlock_rdlock(&list->lock_list);
   if (!list) {
-    rwlock_unlock(&list->lock_list);
     return 1;
   }
 
   struct ListNode *new_node =
       (struct ListNode *)malloc(sizeof(struct ListNode));
   if (!new_node) {
-    rwlock_unlock(&list->lock_list);
     return 1;
   }
 
@@ -41,7 +38,6 @@ int append_to_list(struct EventList *list, struct Event *event) {
     list->tail = new_node;
   }
 
-  rwlock_unlock(&list->lock_list);
   return 0;
 }
 

@@ -83,7 +83,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  rwlock_rdlock(&event_list->lock_list);
+  rwlock_wrlock(&event_list->lock_list);
 
   if (get_event_with_delay(event_id) != NULL) {
     fprintf(stderr, "Event already exists\n");
@@ -139,7 +139,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  rwlock_rdlock(&event_list->lock_list);
+  rwlock_wrlock(&event_list->lock_list);
 
   struct Event *event = get_event_with_delay(event_id);
   if (event == NULL) {
