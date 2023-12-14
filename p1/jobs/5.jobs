@@ -1,0 +1,7 @@
+CREATE 1 10 10
+
+# this should fail (out of bounds)
+RESERVE 1 [(1,1) (100,10)]
+
+RESERVE 1 [(5,5)]
+SHOW 1
