@@ -245,7 +245,7 @@ int ems_list_events(int fd) {
     return 1;
   }
 
-  rwlock_rdlock(&event_list->lock_list);
+  rwlock_wrlock(&event_list->lock_list);
 
   if (event_list->head == NULL) {
     const char *no_events_message = "No events\n";
