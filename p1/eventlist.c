@@ -1,6 +1,7 @@
 #include "eventlist.h"
-#include <pthread.h>
+#include "utils.h"
 
+#include <pthread.h>
 #include <stdlib.h>
 
 struct EventList *create_list() {
@@ -8,22 +9,26 @@ struct EventList *create_list() {
   if (!list)
     return NULL;
 
-  if (pthread_rwlock_init(&list->lock_list, NULL) != 0) {
-    exit(EXIT_FAILURE);
-  }
+  rwlock_init(&list->lock_list);
+
   list->head = NULL;
   list->tail = NULL;
   return list;
 }
 
 int append_to_list(struct EventList *list, struct Event *event) {
-  if (!list)
+  rwlock_wrlock(&list->lock_list);
+  if (!list) {
+    rwlock_unlock(&list->lock_list);
     return 1;
+  }
 
   struct ListNode *new_node =
       (struct ListNode *)malloc(sizeof(struct ListNode));
-  if (!new_node)
+  if (!new_node) {
+    rwlock_unlock(&list->lock_list);
     return 1;
+  }
 
   new_node->event = event;
   new_node->next = NULL;
@@ -36,6 +41,7 @@ int append_to_list(struct EventList *list, struct Event *event) {
     list->tail = new_node;
   }
 
+  rwlock_unlock(&list->lock_list);
   return 0;
 }
 
@@ -64,17 +70,22 @@ void free_list(struct EventList *list) {
 }
 
 struct Event *get_event(struct EventList *list, unsigned int event_id) {
-  if (!list)
+  rwlock_rdlock(&list->lock_list);
+  if (!list) {
+    rwlock_unlock(&list->lock_list);
     return NULL;
+  }
 
   struct ListNode *current = list->head;
   while (current) {
     struct Event *event = current->event;
     if (event->id == event_id) {
+      rwlock_unlock(&list->lock_list);
       return event;
     }
     current = current->next;
   }
 
+  rwlock_unlock(&list->lock_list);
   return NULL;
 }

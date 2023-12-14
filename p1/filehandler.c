@@ -156,20 +156,23 @@ void *execute_file_commands(void *thread) {
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+    int result;
 
     switch (command) {
     case CMD_CREATE:
-      int a = parse_create(thread_args->file->fd, &event_id, &num_rows,
-                           &num_columns);
-      mutex_unlock(&thread_args->file->file_mutex);
-      if (a != 0) {
+      result = parse_create(thread_args->file->fd, &event_id, &num_rows,
+                            &num_columns);
+      if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
+        mutex_unlock(&thread_args->file->file_mutex);
         continue;
       }
 
       if (ems_create(event_id, num_rows, num_columns)) {
         fprintf(stderr, "Failed to create event\n");
       }
+
+      mutex_unlock(&thread_args->file->file_mutex);
 
       break;
 
@@ -186,12 +189,13 @@ void *execute_file_commands(void *thread) {
       if (ems_reserve(event_id, num_coords, xs, ys)) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
+
       break;
 
     case CMD_SHOW:
-      int b = parse_show(thread_args->file->fd, &event_id);
+      result = parse_show(thread_args->file->fd, &event_id);
       mutex_unlock(&thread_args->file->file_mutex);
-      if (b != 0) {
+      if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
@@ -209,10 +213,10 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_WAIT:
-      int c = parse_wait(thread_args->file->fd, &delay, &thread_id);
+      result = parse_wait(thread_args->file->fd, &delay, &thread_id);
       mutex_unlock(&thread_args->file->file_mutex);
 
-      if (c == -1) {
+      if (result == -1) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
@@ -231,6 +235,7 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_HELP:
+      mutex_unlock(&thread_args->file->file_mutex);
       printf("Available commands:\n"
              "  CREATE <event_id> <num_rows> <num_columns>\n"
              "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
@@ -239,7 +244,6 @@ void *execute_file_commands(void *thread) {
              "  WAIT <delay_ms> [thread_id]\n" // thread_id is not implemented
              "  BARRIER\n"                     // Not implemented
              "  HELP\n");
-      mutex_unlock(&thread_args->file->file_mutex);
       break;
 
     case CMD_BARRIER:

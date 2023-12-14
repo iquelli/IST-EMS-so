@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,36 +72,30 @@ int ems_terminate() {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  if (pthread_rwlock_destroy(&event_list->lock_list) != 0) {
-    perror("Failed to destroy the rwlock");
-    exit(EXIT_FAILURE);
-  }
+  rwlock_destroy(&event_list->lock_list);
   free_list(event_list);
   return 0;
 }
 
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
+
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  rwlock_wrlock(&event_list->lock_list);
 
   if (get_event_with_delay(event_id) != NULL) {
     fprintf(stderr, "Event already exists\n");
-    rwlock_unlock(&event_list->lock_list);
     return 1;
   }
 
   struct Event *event = malloc(sizeof(struct Event));
-  rwlock_init(&event->lock);
-
   if (event == NULL) {
     fprintf(stderr, "Error allocating memory for event\n");
-    rwlock_unlock(&event_list->lock_list);
     return 1;
   }
 
+  rwlock_init(&event->lock);
   rwlock_wrlock(&event->lock);
 
   event->id = event_id;
@@ -112,8 +107,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   if (event->data == NULL) {
     fprintf(stderr, "Error allocating memory for event data\n");
     free(event);
-    rwlock_unlock(&event->lock);
-    rwlock_unlock(&event_list->lock_list);
+    rwlock_destroy(&event->lock);
     return 1;
   }
 
@@ -125,13 +119,11 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     fprintf(stderr, "Error appending event to list\n");
     free(event->data);
     free(event);
-    rwlock_unlock(&event->lock);
-    rwlock_unlock(&event_list->lock_list);
+    rwlock_destroy(&event->lock);
     return 1;
   }
-  rwlock_unlock(&event->lock);
-  rwlock_unlock(&event_list->lock_list);
 
+  rwlock_unlock(&event->lock);
   return 0;
 }
 
@@ -141,13 +133,10 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  rwlock_rdlock(&event_list->lock_list);
 
   struct Event *event = get_event_with_delay(event_id);
-
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
-    rwlock_unlock(&event_list->lock_list);
     return 1;
   }
 
@@ -179,12 +168,9 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
     rwlock_unlock(&event->lock);
-    rwlock_unlock(&event_list->lock_list);
     return 1;
   }
   rwlock_unlock(&event->lock);
-  rwlock_unlock(&event_list->lock_list);
-
   return 0;
 }
 
@@ -193,17 +179,16 @@ int ems_show(unsigned int event_id, int fd) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  rwlock_rdlock(&event_list->lock_list);
 
   struct Event *event = get_event_with_delay(event_id);
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
-    rwlock_unlock(&event_list->lock_list);
     return 1;
   }
 
-  rwlock_wrlock(&event->lock);
+  rwlock_rdlock(&event->lock);
+
   // Write in the file
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
@@ -214,7 +199,6 @@ int ems_show(unsigned int event_id, int fd) {
       if (write(fd, seat_str, (size_t)len) != len) {
         fprintf(stderr, "Error writing to the file\n");
         rwlock_unlock(&event->lock);
-        rwlock_unlock(&event_list->lock_list);
         return 1;
       }
 
@@ -222,7 +206,6 @@ int ems_show(unsigned int event_id, int fd) {
         if (write(fd, " ", sizeof(char)) != 1) {
           fprintf(stderr, "Error writing to the file\n");
           rwlock_unlock(&event->lock);
-          rwlock_unlock(&event_list->lock_list);
           return 1;
         }
       }
@@ -231,13 +214,11 @@ int ems_show(unsigned int event_id, int fd) {
     if (write(fd, "\n", sizeof(char)) != 1) {
       fprintf(stderr, "Error writing to the file\n");
       rwlock_unlock(&event->lock);
-      rwlock_unlock(&event_list->lock_list);
       return 1;
     }
   }
-  rwlock_unlock(&event->lock);
-  rwlock_unlock(&event_list->lock_list);
 
+  rwlock_unlock(&event->lock);
   return 0;
 }
 
@@ -247,16 +228,13 @@ int ems_list_events(int fd) {
     return 1;
   }
 
-  rwlock_rdlock(&event_list->lock_list);
-
   if (event_list->head == NULL) {
     const char *no_events_message = "No events\n";
     if (write(fd, no_events_message, 10) != 10) {
       fprintf(stderr, "Error writing to the file\n");
-      rwlock_unlock(&event_list->lock_list);
       return 1;
     }
-    rwlock_unlock(&event_list->lock_list);
+
     return 0;
   }
 
@@ -266,7 +244,7 @@ int ems_list_events(int fd) {
     ssize_t result = write(fd, event_message, strlen(event_message));
     if (result < 0 || (size_t)result != strlen(event_message)) {
       fprintf(stderr, "Error writing to the file\n");
-      rwlock_unlock(&event_list->lock_list);
+
       return 1;
     }
 
@@ -277,19 +255,18 @@ int ems_list_events(int fd) {
 
     if (result < 0 || (size_t)result != (size_t)len) {
       fprintf(stderr, "Error writing to the file\n");
-      rwlock_unlock(&event_list->lock_list);
+
       return 1;
     }
 
     if (write(fd, "\n", sizeof(char)) != 1) {
       fprintf(stderr, "Error writing to the file\n");
-      rwlock_unlock(&event_list->lock_list);
+
       return 1;
     }
 
     current = current->next;
   }
-  rwlock_unlock(&event_list->lock_list);
   return 0;
 }
 
@@ -297,8 +274,3 @@ void ems_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
 }
-
-// create - cria evento
-// reserve - reservar lugar (convém pôr write e read block)
-// show - mostra event (convẽm pôr write block)
-// list - faz uma lista do event (convẽm pôr read block)
