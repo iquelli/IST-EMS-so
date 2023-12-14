@@ -13,6 +13,7 @@
 
 static struct EventList *event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
+pthread_mutex_t out_file_mutex;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -63,6 +64,7 @@ int ems_init(unsigned int delay_ms) {
   }
   event_list = create_list();
   state_access_delay_ms = delay_ms;
+  mutex_init(&out_file_mutex);
 
   return event_list == NULL;
 }
@@ -72,7 +74,8 @@ int ems_terminate() {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  rwlock_destroy(&event_list->lock_list);
+
+  mutex_destroy(&out_file_mutex);
   free_list(event_list);
   return 0;
 }
@@ -83,6 +86,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
+
   rwlock_wrlock(&event_list->lock_list);
 
   if (get_event_with_delay(event_id) != NULL) {
@@ -98,8 +102,8 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     return 1;
   }
 
-  rwlock_init(&event->lock);
-  rwlock_rdlock(&event->lock);
+  rwlock_init(&event->lock); // event is already created
+  rwlock_wrlock(&event->lock);
 
   event->id = event_id;
   event->rows = num_rows;
@@ -139,6 +143,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
+
   rwlock_wrlock(&event_list->lock_list);
 
   struct Event *event = get_event_with_delay(event_id);
@@ -148,7 +153,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     return 1;
   }
 
-  rwlock_wrlock(&event->lock);
+  rwlock_wrlock(&event->lock); // already have event
   unsigned int reservation_id = ++event->reservations;
 
   size_t i = 0;
@@ -175,12 +180,12 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     for (size_t j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
-    rwlock_unlock(&event->lock);
     rwlock_unlock(&event_list->lock_list);
+    rwlock_unlock(&event->lock);
     return 1;
   }
-  rwlock_unlock(&event->lock);
   rwlock_unlock(&event_list->lock_list);
+  rwlock_unlock(&event->lock);
   return 0;
 }
 
@@ -190,7 +195,7 @@ int ems_show(unsigned int event_id, int fd) {
     return 1;
   }
 
-  rwlock_wrlock(&event_list->lock_list);
+  rwlock_rdlock(&event_list->lock_list);
 
   struct Event *event = get_event_with_delay(event_id);
 
@@ -200,9 +205,10 @@ int ems_show(unsigned int event_id, int fd) {
     return 1;
   }
 
-  rwlock_rdlock(&event->lock);
+  rwlock_rdlock(&event->lock); // already have the event, list can be altered
 
   // Write in the file
+  mutex_lock(&out_file_mutex);
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int *seat = get_seat_with_delay(event, seat_index(event, i, j));
@@ -211,16 +217,18 @@ int ems_show(unsigned int event_id, int fd) {
 
       if (write(fd, seat_str, (size_t)len) != len) {
         fprintf(stderr, "Error writing to the file\n");
-        rwlock_unlock(&event->lock);
         rwlock_unlock(&event_list->lock_list);
+        rwlock_unlock(&event->lock);
+        mutex_unlock(&out_file_mutex);
         return 1;
       }
 
       if (j < event->cols) {
         if (write(fd, " ", sizeof(char)) != 1) {
           fprintf(stderr, "Error writing to the file\n");
-          rwlock_unlock(&event->lock);
           rwlock_unlock(&event_list->lock_list);
+          rwlock_unlock(&event->lock);
+          mutex_unlock(&out_file_mutex);
           return 1;
         }
       }
@@ -228,14 +236,16 @@ int ems_show(unsigned int event_id, int fd) {
 
     if (write(fd, "\n", sizeof(char)) != 1) {
       fprintf(stderr, "Error writing to the file\n");
-      rwlock_unlock(&event->lock);
       rwlock_unlock(&event_list->lock_list);
+      rwlock_unlock(&event->lock);
+      mutex_unlock(&out_file_mutex);
       return 1;
     }
   }
 
-  rwlock_unlock(&event->lock);
   rwlock_unlock(&event_list->lock_list);
+  rwlock_unlock(&event->lock);
+  mutex_unlock(&out_file_mutex);
   return 0;
 }
 
@@ -245,16 +255,18 @@ int ems_list_events(int fd) {
     return 1;
   }
 
-  rwlock_wrlock(&event_list->lock_list);
-
+  rwlock_rdlock(&event_list->lock_list);
+  mutex_lock(&out_file_mutex);
   if (event_list->head == NULL) {
     const char *no_events_message = "No events\n";
     if (write(fd, no_events_message, 10) != 10) {
       fprintf(stderr, "Error writing to the file\n");
       rwlock_unlock(&event_list->lock_list);
+      mutex_unlock(&out_file_mutex);
       return 1;
     }
     rwlock_unlock(&event_list->lock_list);
+    mutex_unlock(&out_file_mutex);
     return 0;
   }
 
@@ -265,6 +277,7 @@ int ems_list_events(int fd) {
     if (result < 0 || (size_t)result != strlen(event_message)) {
       fprintf(stderr, "Error writing to the file\n");
       rwlock_unlock(&event_list->lock_list);
+      mutex_unlock(&out_file_mutex);
       return 1;
     }
 
@@ -276,18 +289,21 @@ int ems_list_events(int fd) {
     if (result < 0 || (size_t)result != (size_t)len) {
       fprintf(stderr, "Error writing to the file\n");
       rwlock_unlock(&event_list->lock_list);
+      mutex_unlock(&out_file_mutex);
       return 1;
     }
 
     if (write(fd, "\n", sizeof(char)) != 1) {
       fprintf(stderr, "Error writing to the file\n");
       rwlock_unlock(&event_list->lock_list);
+      mutex_unlock(&out_file_mutex);
       return 1;
     }
 
     current = current->next;
   }
   rwlock_unlock(&event_list->lock_list);
+  mutex_unlock(&out_file_mutex);
   return 0;
 }
 

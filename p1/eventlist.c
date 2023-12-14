@@ -37,7 +37,6 @@ int append_to_list(struct EventList *list, struct Event *event) {
     list->tail->next = new_node;
     list->tail = new_node;
   }
-
   return 0;
 }
 
@@ -55,11 +54,12 @@ void free_list(struct EventList *list) {
   if (!list)
     return;
 
+  rwlock_destroy(&list->lock_list);
+
   struct ListNode *current = list->head;
   while (current) {
     struct ListNode *temp = current;
     current = current->next;
-
     free_event(temp->event);
     free(temp);
   }

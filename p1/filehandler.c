@@ -101,41 +101,41 @@ int process_job_file(char *directory_path, int max_threads) {
     BARRIER = FALSE; // reset barrier
 
     // Create threads
-  for (int i = 0; i < max_threads; i++) {
-    struct ThreadArgs *thread_args = malloc(sizeof(struct ThreadArgs));
-    if (thread_args == NULL) {
-      perror("Error allocating memory for thread arguments");
-      mutex_destroy(&file->file_mutex);
-      close(file->fd_out);
-      close(file->fd);
-      return 1;
-    }
-    thread_args->file = malloc(sizeof(struct JobFile));
-    if (thread_args->file == NULL) {
-      perror("Error allocating memory for JobFile structure");
-      free(thread_args);
-      exit(EXIT_FAILURE);
-    }
-    thread_args->file = file;
-    thread_args->thread_id = (unsigned int)i;
+    for (int i = 0; i < max_threads; i++) {
+      struct ThreadArgs *thread_args = malloc(sizeof(struct ThreadArgs));
+      if (thread_args == NULL) {
+        perror("Error allocating memory for thread arguments");
+        mutex_destroy(&file->file_mutex);
+        close(file->fd_out);
+        close(file->fd);
+        return 1;
+      }
+      thread_args->file = malloc(sizeof(struct JobFile));
+      if (thread_args->file == NULL) {
+        perror("Error allocating memory for JobFile structure");
+        free(thread_args);
+        exit(EXIT_FAILURE);
+      }
+      thread_args->file = file;
+      thread_args->thread_id = (unsigned int)i;
 
-    if (pthread_create(&file->threads[i], NULL, execute_file_commands,
-                       (void *)thread_args) != 0) {
-      perror("Error creating thread");
-      free(thread_args);
-      mutex_destroy(&file->file_mutex);
-      close(file->fd_out);
-      close(file->fd);
-      return 1;
+      if (pthread_create(&file->threads[i], NULL, execute_file_commands,
+                         (void *)thread_args) != 0) {
+        perror("Error creating thread");
+        free(thread_args);
+        mutex_destroy(&file->file_mutex);
+        close(file->fd_out);
+        close(file->fd);
+        return 1;
+      }
     }
-  }
 
-  // Join threads
-  for (int i = 0; i < max_threads; i++) {
-    if (pthread_join(file->threads[i], NULL) != 0) {
-      perror("Error joining thread");
+    // Join threads
+    for (int i = 0; i < max_threads; i++) {
+      if (pthread_join(file->threads[i], NULL) != 0) {
+        perror("Error joining thread");
+      }
     }
-  }
   }
 
   if (close(file->fd_out) != 0) {
@@ -167,6 +167,7 @@ void *execute_file_commands(void *thread) {
     case CMD_CREATE:
       result = parse_create(thread_args->file->fd, &event_id, &num_rows,
                             &num_columns);
+
       if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         mutex_unlock(&thread_args->file->file_mutex);
@@ -177,6 +178,7 @@ void *execute_file_commands(void *thread) {
         fprintf(stderr, "Failed to create event\n");
       }
 
+      // create command always has to reach the end
       mutex_unlock(&thread_args->file->file_mutex);
 
       break;
@@ -212,6 +214,7 @@ void *execute_file_commands(void *thread) {
 
     case CMD_LIST_EVENTS:
       mutex_unlock(&thread_args->file->file_mutex);
+
       if (ems_list_events(thread_args->file->fd_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
