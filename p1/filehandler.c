@@ -274,11 +274,10 @@ void *execute_file_commands(void *file) {
         WAIT = FALSE;
       }
     }
-    
+
     if (BARRIER) {
       break;
     }
-
 
     command = get_next(thread_args->fd);
   }
