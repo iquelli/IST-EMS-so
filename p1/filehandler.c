@@ -161,31 +161,19 @@ void *execute_file_commands(void *thread) {
   int threads_that_need_wait;
 
   while (command != EOC) {
-
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
     int result;
 
-    if (WAIT == TRUE) {
-      if ((wait_time[thread_args->thread_id - 1] > 0)) {
-        printf("Waiting...\n");
-        ems_wait(wait_time[thread_args->thread_id - 1]);
-        wait_time[thread_args->thread_id - 1] = 0;
-        threads_that_need_wait -= 1;
-      }
-      if (threads_that_need_wait == 0) {
-        WAIT = FALSE;
-      }
-    }
-
     switch (command) {
     case CMD_CREATE:
       result = parse_create(thread_args->file->fd, &event_id, &num_rows,
                             &num_columns);
+      mutex_unlock(&thread_args->file->file_mutex);
+
       if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
-        mutex_unlock(&thread_args->file->file_mutex);
         continue;
       }
 
@@ -193,23 +181,23 @@ void *execute_file_commands(void *thread) {
         fprintf(stderr, "Failed to create event\n");
       }
 
-      mutex_unlock(&thread_args->file->file_mutex);
-
       break;
 
     case CMD_RESERVE:
       num_coords = parse_reserve(thread_args->file->fd, MAX_RESERVATION_SIZE,
                                  &event_id, xs, ys);
-      mutex_unlock(&thread_args->file->file_mutex);
 
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
+        mutex_unlock(&thread_args->file->file_mutex);
         continue;
       }
 
       if (ems_reserve(event_id, num_coords, xs, ys)) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
+
+      mutex_unlock(&thread_args->file->file_mutex);
 
       break;
 
@@ -241,20 +229,22 @@ void *execute_file_commands(void *thread) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
+      if (delay == 0) {
+        continue;
+      }
 
       mutex_lock(&thread_args->file->file_mutex);
       WAIT = TRUE;
-      if (delay > 0 && thread_id == 0) {
+      if (thread_id == 0) {
         for (int i = 0; i < thread_args->file->max_threads; i++) {
           wait_time[i] = delay;
         }
         threads_that_need_wait = thread_args->file->max_threads;
-      } else if (delay > 0 && (int)thread_id < thread_args->file->max_threads) {
+      } else if ((int)thread_id < thread_args->file->max_threads) {
         wait_time[thread_id - 1] = delay;
         threads_that_need_wait = 1;
       }
       mutex_unlock(&thread_args->file->file_mutex);
-
       break;
 
     case CMD_INVALID:
@@ -292,6 +282,19 @@ void *execute_file_commands(void *thread) {
     // lock before getting next command
     mutex_lock(&thread_args->file->file_mutex);
     command = get_next(thread_args->file->fd);
+
+    // check if there needs to be wait for the thread
+    if (WAIT == TRUE) {
+      if ((wait_time[thread_args->thread_id - 1] > 0)) {
+        printf("Waiting...\n");
+        ems_wait(wait_time[thread_args->thread_id - 1]);
+        wait_time[thread_args->thread_id - 1] = 0;
+        threads_that_need_wait -= 1;
+      }
+      if (threads_that_need_wait == 0) {
+        WAIT = FALSE;
+      }
+    }
   }
 
   mutex_unlock(&thread_args->file->file_mutex);
