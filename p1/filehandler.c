@@ -19,40 +19,6 @@ int BARRIER = FALSE;
 int WAIT = FALSE;
 unsigned int *wait_time;
 
-int retrieve_job_files(char *directory_path, char *files[], int *num_of_files) {
-  DIR *dir;
-  struct dirent *dir_entry;
-
-  if ((dir = opendir(directory_path)) == NULL) {
-    fprintf(stderr, "Could not open the directory\n");
-    return 1;
-  }
-
-  // Put .job files from the directory in the list files
-  while ((dir_entry = readdir(dir)) != NULL && (*num_of_files) < MAX_FILES) {
-    if (strstr(dir_entry->d_name, ".jobs") != NULL) {
-      files[(*num_of_files)] = (char *)malloc(MAX_DIRECTORY);
-      if (files[(*num_of_files)] == NULL) {
-        fprintf(stderr, "Memory allocation error\n");
-        closedir(dir);
-        return 1;
-      }
-      snprintf(files[(*num_of_files)], MAX_DIRECTORY, "%s/%s", directory_path,
-               dir_entry->d_name);
-      (*num_of_files)++;
-    }
-  }
-
-  closedir(dir);
-
-  if (num_of_files == 0) {
-    fprintf(stderr, "No '.jobs' files in the directory\n");
-    return 1;
-  }
-
-  return 0;
-}
-
 int open_file(char *directory_path, struct JobFile *file) {
   file->fd = open(directory_path, O_RDONLY);
   if (file->fd == -1) {
@@ -169,7 +135,10 @@ int process_job_file(char *directory_path, int max_threads) {
     perror("Could not close the input file");
   }
 
+  free(result);
   mutex_destroy(&file->file_mutex);
+  free(file->threads);
+  free(file);
 
   return 0;
 }
