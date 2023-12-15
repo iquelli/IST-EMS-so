@@ -132,7 +132,7 @@ void *execute_file_commands(void *file) {
   int threads_that_need_wait;
   int *thread_result = malloc(sizeof(int));
 
-  while (command != EOC || BARRIER) {
+  while (command != EOC && !BARRIER) {
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
@@ -255,12 +255,9 @@ void *execute_file_commands(void *file) {
       pthread_exit(thread_result);
     }
 
-    // lock before getting next command
-    mutex_lock(&thread_args->file_mutex);
-    command = get_next(thread_args->fd);
-
     // check if there needs to be wait for the thread
     if (WAIT == TRUE) {
+      mutex_lock(&thread_args->file_mutex);
       if ((wait_time[thread_args->thread_id - 1] > 0)) {
         printf("Waiting...\n");
         ems_wait(wait_time[thread_args->thread_id - 1]);
@@ -270,7 +267,12 @@ void *execute_file_commands(void *file) {
       if (threads_that_need_wait == 0) {
         WAIT = FALSE;
       }
+      mutex_unlock(&thread_args->file_mutex);
     }
+
+    // lock before getting next command
+    mutex_lock(&thread_args->file_mutex);
+    command = get_next(thread_args->fd);
   }
 
   mutex_unlock(&thread_args->file_mutex);
