@@ -15,7 +15,7 @@
 #include "parser.h"
 #include "utils.h"
 
-int BARRIER = TRUE;
+int BARRIER = FALSE;
 int WAIT = FALSE;
 unsigned int *wait_time;
 
@@ -78,6 +78,41 @@ int open_file(char *directory_path, struct JobFile *file) {
   return 0;
 }
 
+int create_threads(int max_threads, struct JobFile *file) {
+  for (int i = 0; i < max_threads; i++) {
+    struct ThreadArgs *thread_args = malloc(sizeof(struct ThreadArgs));
+
+    if (thread_args == NULL) {
+      perror("Error allocating memory for thread arguments");
+      mutex_destroy(&file->file_mutex);
+      close(file->fd_out);
+      close(file->fd);
+      return 1;
+    }
+
+    thread_args->file = malloc(sizeof(struct JobFile));
+    if (thread_args->file == NULL) {
+      perror("Error allocating memory for JobFile structure");
+      free(thread_args);
+      exit(EXIT_FAILURE);
+    }
+
+    thread_args->file = file;
+    thread_args->thread_id = (unsigned int)i + 1;
+
+    if (pthread_create(&file->threads[i], NULL, execute_file_commands,
+                       (void *)thread_args) != 0) {
+      perror("Error creating thread");
+      free(thread_args);
+      mutex_destroy(&file->file_mutex);
+      close(file->fd_out);
+      close(file->fd);
+      return 1;
+    }
+  }
+  return 0;
+}
+
 int process_job_file(char *directory_path, int max_threads) {
   struct JobFile *file = malloc(sizeof(struct JobFile));
 
@@ -99,45 +134,30 @@ int process_job_file(char *directory_path, int max_threads) {
 
   mutex_init(&file->file_mutex);
 
-  while (BARRIER) {
-    BARRIER = FALSE; // reset barrier
+  if (create_threads(max_threads, file) != 0) {
+    perror("Could not execute program.");
+    return 1;
+  }
 
-    // Create threads
+  void *result;
+  int exit = FALSE;
+  while (TRUE) {
     for (int i = 0; i < max_threads; i++) {
-      struct ThreadArgs *thread_args = malloc(sizeof(struct ThreadArgs));
-      if (thread_args == NULL) {
-        perror("Error allocating memory for thread arguments");
-        mutex_destroy(&file->file_mutex);
-        close(file->fd_out);
-        close(file->fd);
-        return 1;
-      }
-      thread_args->file = malloc(sizeof(struct JobFile));
-      if (thread_args->file == NULL) {
-        perror("Error allocating memory for JobFile structure");
-        free(thread_args);
-        exit(EXIT_FAILURE);
-      }
-      thread_args->file = file;
-      thread_args->thread_id = (unsigned int)i + 1;
-
-      if (pthread_create(&file->threads[i], NULL, execute_file_commands,
-                         (void *)thread_args) != 0) {
-        perror("Error creating thread");
-        free(thread_args);
-        mutex_destroy(&file->file_mutex);
-        close(file->fd_out);
-        close(file->fd);
-        return 1;
-      }
-    }
-
-    // Join threads
-    for (int i = 0; i < max_threads; i++) {
-      if (pthread_join(file->threads[i], NULL) != 0) {
+      if (pthread_join(file->threads[i], &result) != 0) {
         perror("Error joining thread");
       }
+      int thread_result = *(int *)result;
+      if (thread_result == 1) { // left because of the end of the file
+        exit = TRUE;
+      }
     }
+
+    if (exit) {
+      break;
+    }
+
+    // continues because the file hasnt ended, and left because of a barrier
+    create_threads(max_threads, file);
   }
 
   if (close(file->fd_out) != 0) {
@@ -160,7 +180,7 @@ void *execute_file_commands(void *thread) {
   int command = get_next(thread_args->file->fd);
   int threads_that_need_wait;
 
-  while (command != EOC) {
+  while (command != EOC || BARRIER) {
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
@@ -197,7 +217,7 @@ void *execute_file_commands(void *thread) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
 
-      //mutex_unlock(&thread_args->file->file_mutex); ??
+      // mutex_unlock(&thread_args->file->file_mutex); ??
 
       break;
 
@@ -265,7 +285,7 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_BARRIER:
-      BARRIER = 1; // Set termination cause to BARRIER
+      BARRIER = TRUE; // Set termination cause to BARRIER
       mutex_unlock(&thread_args->file->file_mutex);
       pthread_exit(NULL);
 
@@ -274,8 +294,8 @@ void *execute_file_commands(void *thread) {
       break;
 
     case EOC:
-      ems_terminate();
       mutex_unlock(&thread_args->file->file_mutex);
+      ems_terminate();
       pthread_exit(NULL);
     }
 
@@ -298,5 +318,11 @@ void *execute_file_commands(void *thread) {
   }
 
   mutex_unlock(&thread_args->file->file_mutex);
-  pthread_exit(NULL);
+
+  int *result = malloc(sizeof(int));
+  *result = 0;
+  if (command == EOF) {
+    *result = 1;
+  }
+  pthread_exit(result);
 }

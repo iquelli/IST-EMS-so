@@ -30,6 +30,12 @@ int retrieve_job_files(char *directory_path, char *files[], int *num_of_files);
 int open_file(char *directory_path, struct JobFile *file);
 
 /*
+  Creates the threads for the file.
+  @return Returns 0 if successful, 1 otherwhise.
+*/
+int create_threads(int max_threads, struct JobFile *file);
+
+/*
   Process job files, create threads, and wait for their completion.
   @return Returns 0 if successful, 1 otherwise.
 */
