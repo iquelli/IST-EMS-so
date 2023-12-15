@@ -56,14 +56,12 @@ int create_threads(int max_threads, struct JobFile *file) {
       return 1;
     }
 
-    thread_args->file = malloc(sizeof(struct JobFile));
+    thread_args->file = file;
     if (thread_args->file == NULL) {
       perror("Error allocating memory for JobFile structure");
       free(thread_args);
       exit(EXIT_FAILURE);
     }
-
-    thread_args->file = file;
     thread_args->thread_id = (unsigned int)i + 1;
 
     if (pthread_create(&file->threads[i], NULL, execute_file_commands,
@@ -126,6 +124,8 @@ int process_job_file(char *directory_path, int max_threads) {
     BARRIER = FALSE;
     create_threads(max_threads, file);
   }
+
+  ems_terminate(); // terminate here
 
   if (close(file->fd_out) != 0) {
     perror("Could not close the output file");
@@ -266,7 +266,6 @@ void *execute_file_commands(void *thread) {
 
     case EOC:
       mutex_unlock(&thread_args->file->file_mutex);
-      // ems_terminate();
 
       *thread_result = 0;
       if (command == EOC) {

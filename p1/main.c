@@ -55,10 +55,11 @@ int main(int argc, char *argv[]) {
 
   // Iterate through files
   int active_processes = 0;
-  while((dir_entry = readdir(dir)) != NULL ) {
-    char* filename;
+  while ((dir_entry = readdir(dir)) != NULL) {
+    char *filename;
     if (strstr(dir_entry->d_name, ".jobs") != NULL) {
-      size_t filename_size = sizeof(directory_path) +  sizeof(dir_entry->d_name) + 2;
+      size_t filename_size =
+          sizeof(directory_path) + sizeof(dir_entry->d_name) + 2;
       filename = malloc(filename_size);
       snprintf(filename, filename_size, "%s/%s", directory_path,
                dir_entry->d_name);
@@ -77,7 +78,7 @@ int main(int argc, char *argv[]) {
     }
     if (pid == 0) {
       exit(process_job_file(filename, max_threads) != 0);
-     exit(0);
+      exit(0);
     }
 
     free(filename);
