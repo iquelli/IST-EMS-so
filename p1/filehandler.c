@@ -246,7 +246,7 @@ void *execute_file_commands(void *thread) {
           thread_args->file->wait_time[i] = delay;
         }
 
-      } else if (delay > 0 && thread_id > 0) {
+      } else if (delay > 0 && (int) thread_id < thread_args->file->max_threads) {
         thread_args->file->wait_time[thread_id-1] = delay;
       }
 
