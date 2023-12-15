@@ -128,11 +128,12 @@ void *execute_file_commands(void *file) {
   struct JobFile *thread_args = (struct JobFile *)file;
 
   mutex_lock(&thread_args->file_mutex);
+
   int command = get_next(thread_args->fd);
   int threads_that_need_wait;
   int *thread_result = malloc(sizeof(int));
 
-  while (command != EOC && !BARRIER) {
+  while (command != EOC) {
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
@@ -145,7 +146,7 @@ void *execute_file_commands(void *file) {
       mutex_unlock(&thread_args->file_mutex);
 
       if (result != 0) {
-        fprintf(stderr, "Invalid command. See HELP for usage\n");
+        fprintf(stderr, "Invalid create command. See HELP for usage\n");
         continue;
       }
 
@@ -161,7 +162,7 @@ void *execute_file_commands(void *file) {
       mutex_unlock(&thread_args->file_mutex);
 
       if (num_coords == 0) {
-        fprintf(stderr, "Invalid command. See HELP for usage\n");
+        fprintf(stderr, "Invalid reserve command. See HELP for usage\n");
         continue;
       }
 
@@ -176,7 +177,7 @@ void *execute_file_commands(void *file) {
       result = parse_show(thread_args->fd, &event_id);
       mutex_unlock(&thread_args->file_mutex);
       if (result != 0) {
-        fprintf(stderr, "Invalid command. See HELP for usage\n");
+        fprintf(stderr, "Invalid show command. See HELP for usage\n");
         continue;
       }
       if (ems_show(event_id, thread_args->fd_out)) {
@@ -197,7 +198,7 @@ void *execute_file_commands(void *file) {
       mutex_unlock(&thread_args->file_mutex);
 
       if (result == -1) {
-        fprintf(stderr, "Invalid command. See HELP for usage\n");
+        fprintf(stderr, "Invalid wait command. See HELP for usage\n");
         continue;
       }
       if (delay == 0) {
@@ -216,6 +217,7 @@ void *execute_file_commands(void *file) {
         threads_that_need_wait = 1;
       }
       mutex_unlock(&thread_args->file_mutex);
+
       break;
 
     case CMD_INVALID:
@@ -255,9 +257,15 @@ void *execute_file_commands(void *file) {
       pthread_exit(thread_result);
     }
 
+    // lock before getting next command
+    mutex_lock(&thread_args->file_mutex);
+
+    if (BARRIER) {
+      break;
+    }
+
     // check if there needs to be wait for the thread
     if (WAIT == TRUE) {
-      mutex_lock(&thread_args->file_mutex);
       if ((wait_time[thread_args->thread_id - 1] > 0)) {
         printf("Waiting...\n");
         ems_wait(wait_time[thread_args->thread_id - 1]);
@@ -267,11 +275,8 @@ void *execute_file_commands(void *file) {
       if (threads_that_need_wait == 0) {
         WAIT = FALSE;
       }
-      mutex_unlock(&thread_args->file_mutex);
     }
 
-    // lock before getting next command
-    mutex_lock(&thread_args->file_mutex);
     command = get_next(thread_args->fd);
   }
 
