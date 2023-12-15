@@ -1,0 +1,16 @@
+# this should fail (event not created)
+RESERVE 1 [(1,1) (10,10)]
+
+BARRIER
+
+CREATE 1 10 10
+
+WAIT 1000
+
+RESERVE 1 [(2,2)]
+
+BARRIER
+
+SHOW 1
+WAIT 1000
+LIST

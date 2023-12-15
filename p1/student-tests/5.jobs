@@ -1,0 +1,14 @@
+CREATE 1 10 10
+
+WAIT 1000
+
+# this should fail (out of bounds)
+RESERVE 1 [(1,1) (100,10)]
+
+WAIT 1000
+
+RESERVE 1 [(5,5)]
+
+WAIT 1000
+
+SHOW 1

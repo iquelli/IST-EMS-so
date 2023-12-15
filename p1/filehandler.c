@@ -15,9 +15,9 @@
 #include "parser.h"
 #include "utils.h"
 
-pthread_mutex_t file_mutex;
 int BARRIER = TRUE;
 int WAIT = FALSE;
+unsigned int *wait_time;
 
 int retrieve_job_files(char *directory_path, char *files[], int *num_of_files) {
   DIR *dir;
@@ -88,6 +88,7 @@ int process_job_file(char *directory_path, int max_threads) {
 
   file->max_threads = max_threads;
   file->threads = malloc(sizeof(pthread_t) * (size_t)max_threads);
+  wait_time = malloc(sizeof(unsigned int) * (size_t)max_threads);
 
   if (file->threads == NULL) {
     perror("Error allocating memory for threads");
@@ -118,8 +119,7 @@ int process_job_file(char *directory_path, int max_threads) {
         exit(EXIT_FAILURE);
       }
       thread_args->file = file;
-      thread_args->thread_id = (unsigned int)i;
-      thread_args->file->wait_time[i] = 0;
+      thread_args->thread_id = (unsigned int)i + 1;
 
       if (pthread_create(&file->threads[i], NULL, execute_file_commands,
                          (void *)thread_args) != 0) {
@@ -158,23 +158,25 @@ void *execute_file_commands(void *thread) {
 
   mutex_lock(&thread_args->file->file_mutex);
   int command = get_next(thread_args->file->fd);
+  int threads_that_need_wait;
 
   while (command != EOC) {
-    
+
     unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
     int result;
 
     if (WAIT == TRUE) {
-      for (int i = 0; i < thread_args->file->max_threads; i++) {
-        if (thread_args->file->wait_time[i] > 0) {
-          printf("Waiting...\n");
-          ems_wait(thread_args->file->wait_time[i]);
-          thread_args->file->wait_time[i] = 0;
-        }
+      if ((wait_time[thread_args->thread_id - 1] > 0)) {
+        printf("Waiting...\n");
+        ems_wait(wait_time[thread_args->thread_id - 1]);
+        wait_time[thread_args->thread_id - 1] = 0;
+        threads_that_need_wait -= 1;
       }
-      WAIT = FALSE;
+      if (threads_that_need_wait == 0) {
+        WAIT = FALSE;
+      }
     }
 
     switch (command) {
@@ -240,15 +242,18 @@ void *execute_file_commands(void *thread) {
         continue;
       }
 
+      mutex_lock(&thread_args->file->file_mutex);
       WAIT = TRUE;
       if (delay > 0 && thread_id == 0) {
         for (int i = 0; i < thread_args->file->max_threads; i++) {
-          thread_args->file->wait_time[i] = delay;
+          wait_time[i] = delay;
         }
-
-      } else if (delay > 0 && (int) thread_id < thread_args->file->max_threads) {
-        thread_args->file->wait_time[thread_id-1] = delay;
+        threads_that_need_wait = thread_args->file->max_threads;
+      } else if (delay > 0 && (int)thread_id < thread_args->file->max_threads) {
+        wait_time[thread_id - 1] = delay;
+        threads_that_need_wait = 1;
       }
+      mutex_unlock(&thread_args->file->file_mutex);
 
       break;
 
@@ -270,7 +275,7 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_BARRIER:
-      BARRIER = 1;  // Set termination cause to BARRIER
+      BARRIER = 1; // Set termination cause to BARRIER
       mutex_unlock(&thread_args->file->file_mutex);
       pthread_exit(NULL);
 

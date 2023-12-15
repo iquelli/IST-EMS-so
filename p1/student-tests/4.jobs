@@ -1,0 +1,9 @@
+# this prints "No events"
+LIST
+WAIT 1000
+
+CREATE 1 10 10
+BARRIER
+RESERVE 1 [(1,1) (10,10)]
+WAIT 1000
+SHOW 1

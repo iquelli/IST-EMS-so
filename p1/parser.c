@@ -243,6 +243,7 @@ int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id) {
   if (ch == ' ') {
     if (thread_id == NULL) {
       cleanup(fd);
+      thread_id = 0; // in case there is no thread specified
       return 0;
     }
 
@@ -250,7 +251,6 @@ int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id) {
       cleanup(fd);
       return -1;
     }
-
     return 1;
   } else if (ch == '\n' || ch == '\0') {
     return 0;

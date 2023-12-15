@@ -1,0 +1,18 @@
+CREATE 1 10 10
+BARRIER
+RESERVE 1 [(1,1) (10,10)]
+
+BARRIER
+WAIT 1000
+
+# this should fail (1,1 already reserved)
+RESERVE 1 [(1,1) (1,2)]
+
+BARRIER
+RESERVE 1 [(2,2)]
+
+BARRIER
+
+SHOW 1
+
+LIST
