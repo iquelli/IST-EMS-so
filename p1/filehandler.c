@@ -46,7 +46,9 @@ int open_file(char *directory_path, struct JobFile *file) {
 
 int create_threads(int max_threads, struct JobFile *file) {
   for (int i = 0; i < max_threads; i++) {
+    mutex_lock(&file->file_mutex);
     file->thread_id = (unsigned int)i + 1;
+    mutex_unlock(&file->file_mutex);
 
     if (pthread_create(&file->threads[i], NULL, execute_file_commands,
                        (void *)file) != 0) {
@@ -128,13 +130,13 @@ void *execute_file_commands(void *file) {
   struct JobFile *thread_args = (struct JobFile *)file;
 
   mutex_lock(&thread_args->file_mutex);
-
+  unsigned int thread_id = thread_args->thread_id;
   int command = get_next(thread_args->fd);
   int threads_that_need_wait;
   int *thread_result = malloc(sizeof(int));
 
   while (command != EOC) {
-    unsigned int event_id, delay, thread_id;
+    unsigned int event_id, delay, thread_id_wait;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
     int result;
@@ -194,7 +196,7 @@ void *execute_file_commands(void *file) {
       break;
 
     case CMD_WAIT:
-      result = parse_wait(thread_args->fd, &delay, &thread_id);
+      result = parse_wait(thread_args->fd, &delay, &thread_id_wait);
       mutex_unlock(&thread_args->file_mutex);
 
       if (result == -1) {
@@ -207,13 +209,13 @@ void *execute_file_commands(void *file) {
 
       mutex_lock(&thread_args->file_mutex);
       WAIT = TRUE;
-      if (thread_id == 0) {
+      if (thread_id_wait == 0) {
         for (int i = 0; i < thread_args->max_threads; i++) {
           wait_time[i] = delay;
         }
         threads_that_need_wait = thread_args->max_threads;
-      } else if ((int)thread_id < thread_args->max_threads) {
-        wait_time[thread_id - 1] = delay;
+      } else if ((int)thread_id_wait < thread_args->max_threads) {
+        wait_time[thread_id_wait - 1] = delay;
         threads_that_need_wait = 1;
       }
       mutex_unlock(&thread_args->file_mutex);
@@ -260,22 +262,23 @@ void *execute_file_commands(void *file) {
     // lock before getting next command
     mutex_lock(&thread_args->file_mutex);
 
-    if (BARRIER) {
-      break;
-    }
-
     // check if there needs to be wait for the thread
     if (WAIT == TRUE) {
-      if ((wait_time[thread_args->thread_id - 1] > 0)) {
+      if ((wait_time[thread_id - 1] > 0)) {
         printf("Waiting...\n");
-        ems_wait(wait_time[thread_args->thread_id - 1]);
-        wait_time[thread_args->thread_id - 1] = 0;
+        ems_wait(wait_time[thread_id - 1]);
+        wait_time[thread_id - 1] = 0;
         threads_that_need_wait -= 1;
       }
       if (threads_that_need_wait == 0) {
         WAIT = FALSE;
       }
     }
+    
+    if (BARRIER) {
+      break;
+    }
+
 
     command = get_next(thread_args->fd);
   }
