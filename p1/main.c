@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
   }
   printf("All child processes have terminated\n");
 
-  if(ems_terminate()) {
+  if (ems_terminate()) {
     fprintf(stderr, "Failed to terminate EMS\n");
     return 1;
   }

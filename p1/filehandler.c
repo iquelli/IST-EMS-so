@@ -46,7 +46,7 @@ int open_file(char *directory_path, struct JobFile *file) {
 
 int create_threads(int max_threads, struct JobFile *file) {
   for (int i = 0; i < max_threads; i++) {
-    file->thread_id = (unsigned int) i + 1;
+    file->thread_id = (unsigned int)i + 1;
 
     if (pthread_create(&file->threads[i], NULL, execute_file_commands,
                        (void *)file) != 0) {
@@ -88,7 +88,7 @@ int process_job_file(char *directory_path, int max_threads) {
 
   int exit = FALSE;
   while (TRUE) {
-    void *result = malloc(sizeof(int)); 
+    void *result = malloc(sizeof(int));
     for (int i = 0; i < max_threads; i++) {
       if (pthread_join(file->threads[i], &result) != 0) {
         perror("Error joining thread");
@@ -97,9 +97,8 @@ int process_job_file(char *directory_path, int max_threads) {
       if (thread_result == 1) { // left because of the end of the file
         exit = TRUE;
       }
-
     }
-    free(result); 
+    free(result);
 
     if (exit) {
       break;
@@ -109,7 +108,6 @@ int process_job_file(char *directory_path, int max_threads) {
     BARRIER = FALSE;
     create_threads(max_threads, file);
   }
-
 
   if (close(file->fd_out) != 0) {
     perror("Could not close the output file");
@@ -142,8 +140,8 @@ void *execute_file_commands(void *file) {
 
     switch (command) {
     case CMD_CREATE:
-      result = parse_create(thread_args->fd, &event_id, &num_rows,
-                            &num_columns);
+      result =
+          parse_create(thread_args->fd, &event_id, &num_rows, &num_columns);
       mutex_unlock(&thread_args->file_mutex);
 
       if (result != 0) {

@@ -22,7 +22,7 @@ void rwlock_destroy(pthread_rwlock_t *lock);
 void rwlock_rdlock(pthread_rwlock_t *lock);
 
 /*
- *Locks the rwlock for writing. Exits if the lock fails. 
+ *Locks the rwlock for writing. Exits if the lock fails.
  * @param lock  The rwlock to be locked.
  */
 void rwlock_wrlock(pthread_rwlock_t *lock);
@@ -47,12 +47,12 @@ void mutex_destroy(pthread_mutex_t *mutex);
 
 /*
  *Locks the mutex. Exits if the lock fails.
- * @param mutex  The mutex to be locked. 
+ * @param mutex  The mutex to be locked.
  */
 void mutex_lock(pthread_mutex_t *mutex);
 
 /*
- *Unlocks the mutex. Exits if the unlock fails. 
+ *Unlocks the mutex. Exits if the unlock fails.
  * @param mutex  The mutex to be unlocked.
  */
 void mutex_unlock(pthread_mutex_t *mutex);
