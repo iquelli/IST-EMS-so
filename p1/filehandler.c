@@ -125,8 +125,6 @@ int process_job_file(char *directory_path, int max_threads) {
     create_threads(max_threads, file);
   }
 
-  ems_terminate(); // terminate here
-
   if (close(file->fd_out) != 0) {
     perror("Could not close the output file");
   }
