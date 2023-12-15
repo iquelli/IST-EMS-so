@@ -47,7 +47,6 @@ int main(int argc, char *argv[]) {
 
   DIR *dir;
   struct dirent *dir_entry;
-
   if ((dir = opendir(directory_path)) == NULL) {
     fprintf(stderr, "Could not open the directory\n");
     return 1;

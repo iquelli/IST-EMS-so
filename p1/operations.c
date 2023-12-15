@@ -113,8 +113,8 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 
   if (event->data == NULL) {
     fprintf(stderr, "Error allocating memory for event data\n");
-    free(event);
     rwlock_destroy(&event->lock);
+    free(event);
     rwlock_unlock(&event_list->lock_list);
     return 1;
   }
@@ -125,9 +125,9 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 
   if (append_to_list(event_list, event) != 0) {
     fprintf(stderr, "Error appending event to list\n");
+    rwlock_destroy(&event->lock);
     free(event->data);
     free(event);
-    rwlock_destroy(&event->lock);
     rwlock_unlock(&event_list->lock_list);
     return 1;
   }
