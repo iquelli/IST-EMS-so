@@ -46,28 +46,11 @@ int open_file(char *directory_path, struct JobFile *file) {
 
 int create_threads(int max_threads, struct JobFile *file) {
   for (int i = 0; i < max_threads; i++) {
-    struct ThreadArgs *thread_args = malloc(sizeof(struct ThreadArgs));
-
-    if (thread_args == NULL) {
-      perror("Error allocating memory for thread arguments");
-      mutex_destroy(&file->file_mutex);
-      close(file->fd_out);
-      close(file->fd);
-      return 1;
-    }
-
-    thread_args->file = file;
-    if (thread_args->file == NULL) {
-      perror("Error allocating memory for JobFile structure");
-      free(thread_args);
-      exit(EXIT_FAILURE);
-    }
-    thread_args->thread_id = (unsigned int)i + 1;
+    file->thread_id = (unsigned int) i + 1;
 
     if (pthread_create(&file->threads[i], NULL, execute_file_commands,
-                       (void *)thread_args) != 0) {
+                       (void *)file) != 0) {
       perror("Error creating thread");
-      free(thread_args);
       mutex_destroy(&file->file_mutex);
       close(file->fd_out);
       close(file->fd);
@@ -103,9 +86,9 @@ int process_job_file(char *directory_path, int max_threads) {
     return 1;
   }
 
-  void *result = malloc(sizeof(int));
   int exit = FALSE;
   while (TRUE) {
+    void *result = malloc(sizeof(int)); 
     for (int i = 0; i < max_threads; i++) {
       if (pthread_join(file->threads[i], &result) != 0) {
         perror("Error joining thread");
@@ -114,7 +97,9 @@ int process_job_file(char *directory_path, int max_threads) {
       if (thread_result == 1) { // left because of the end of the file
         exit = TRUE;
       }
+
     }
+    free(result); 
 
     if (exit) {
       break;
@@ -125,6 +110,7 @@ int process_job_file(char *directory_path, int max_threads) {
     create_threads(max_threads, file);
   }
 
+
   if (close(file->fd_out) != 0) {
     perror("Could not close the output file");
   }
@@ -133,7 +119,6 @@ int process_job_file(char *directory_path, int max_threads) {
     perror("Could not close the input file");
   }
 
-  free(result);
   mutex_destroy(&file->file_mutex);
   free(file->threads);
   free(file);
@@ -141,11 +126,11 @@ int process_job_file(char *directory_path, int max_threads) {
   return 0;
 }
 
-void *execute_file_commands(void *thread) {
-  struct ThreadArgs *thread_args = (struct ThreadArgs *)thread;
+void *execute_file_commands(void *file) {
+  struct JobFile *thread_args = (struct JobFile *)file;
 
-  mutex_lock(&thread_args->file->file_mutex);
-  int command = get_next(thread_args->file->fd);
+  mutex_lock(&thread_args->file_mutex);
+  int command = get_next(thread_args->fd);
   int threads_that_need_wait;
   int *thread_result = malloc(sizeof(int));
 
@@ -157,9 +142,9 @@ void *execute_file_commands(void *thread) {
 
     switch (command) {
     case CMD_CREATE:
-      result = parse_create(thread_args->file->fd, &event_id, &num_rows,
+      result = parse_create(thread_args->fd, &event_id, &num_rows,
                             &num_columns);
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
 
       if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -173,9 +158,9 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_RESERVE:
-      num_coords = parse_reserve(thread_args->file->fd, MAX_RESERVATION_SIZE,
+      num_coords = parse_reserve(thread_args->fd, MAX_RESERVATION_SIZE,
                                  &event_id, xs, ys);
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
 
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -190,28 +175,28 @@ void *execute_file_commands(void *thread) {
       break;
 
     case CMD_SHOW:
-      result = parse_show(thread_args->file->fd, &event_id);
-      mutex_unlock(&thread_args->file->file_mutex);
+      result = parse_show(thread_args->fd, &event_id);
+      mutex_unlock(&thread_args->file_mutex);
       if (result != 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
-      if (ems_show(event_id, thread_args->file->fd_out)) {
+      if (ems_show(event_id, thread_args->fd_out)) {
         fprintf(stderr, "Failed to show event\n");
       }
 
       break;
 
     case CMD_LIST_EVENTS:
-      mutex_unlock(&thread_args->file->file_mutex);
-      if (ems_list_events(thread_args->file->fd_out)) {
+      mutex_unlock(&thread_args->file_mutex);
+      if (ems_list_events(thread_args->fd_out)) {
         fprintf(stderr, "Failed to list events\n");
       }
       break;
 
     case CMD_WAIT:
-      result = parse_wait(thread_args->file->fd, &delay, &thread_id);
-      mutex_unlock(&thread_args->file->file_mutex);
+      result = parse_wait(thread_args->fd, &delay, &thread_id);
+      mutex_unlock(&thread_args->file_mutex);
 
       if (result == -1) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
@@ -221,27 +206,27 @@ void *execute_file_commands(void *thread) {
         continue;
       }
 
-      mutex_lock(&thread_args->file->file_mutex);
+      mutex_lock(&thread_args->file_mutex);
       WAIT = TRUE;
       if (thread_id == 0) {
-        for (int i = 0; i < thread_args->file->max_threads; i++) {
+        for (int i = 0; i < thread_args->max_threads; i++) {
           wait_time[i] = delay;
         }
-        threads_that_need_wait = thread_args->file->max_threads;
-      } else if ((int)thread_id < thread_args->file->max_threads) {
+        threads_that_need_wait = thread_args->max_threads;
+      } else if ((int)thread_id < thread_args->max_threads) {
         wait_time[thread_id - 1] = delay;
         threads_that_need_wait = 1;
       }
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
       break;
 
     case CMD_INVALID:
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
       fprintf(stderr, "Invalid command. See HELP for usage\n");
       break;
 
     case CMD_HELP:
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
       printf("Available commands:\n"
              "  CREATE <event_id> <num_rows> <num_columns>\n"
              "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
@@ -254,16 +239,16 @@ void *execute_file_commands(void *thread) {
 
     case CMD_BARRIER:
       BARRIER = TRUE; // Set termination cause to BARRIER
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
       *thread_result = 0;
       pthread_exit(thread_result);
 
     case CMD_EMPTY:
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
       break;
 
     case EOC:
-      mutex_unlock(&thread_args->file->file_mutex);
+      mutex_unlock(&thread_args->file_mutex);
 
       *thread_result = 0;
       if (command == EOC) {
@@ -273,8 +258,8 @@ void *execute_file_commands(void *thread) {
     }
 
     // lock before getting next command
-    mutex_lock(&thread_args->file->file_mutex);
-    command = get_next(thread_args->file->fd);
+    mutex_lock(&thread_args->file_mutex);
+    command = get_next(thread_args->fd);
 
     // check if there needs to be wait for the thread
     if (WAIT == TRUE) {
@@ -290,7 +275,7 @@ void *execute_file_commands(void *thread) {
     }
   }
 
-  mutex_unlock(&thread_args->file->file_mutex);
+  mutex_unlock(&thread_args->file_mutex);
 
   *thread_result = 0;
   if (command == EOC) {

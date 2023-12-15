@@ -10,11 +10,7 @@ struct JobFile {
   int max_threads;
   pthread_t *threads;
   pthread_mutex_t file_mutex;
-};
-
-struct ThreadArgs {
   unsigned int thread_id;
-  struct JobFile *file;
 };
 
 /*
