@@ -186,10 +186,10 @@ void *execute_file_commands(void *thread) {
     case CMD_RESERVE:
       num_coords = parse_reserve(thread_args->file->fd, MAX_RESERVATION_SIZE,
                                  &event_id, xs, ys);
+      mutex_unlock(&thread_args->file->file_mutex);
 
       if (num_coords == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
-        mutex_unlock(&thread_args->file->file_mutex);
         continue;
       }
 
@@ -197,7 +197,7 @@ void *execute_file_commands(void *thread) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
 
-      mutex_unlock(&thread_args->file->file_mutex);
+      //mutex_unlock(&thread_args->file->file_mutex); ??
 
       break;
 

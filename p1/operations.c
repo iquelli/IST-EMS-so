@@ -180,12 +180,14 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     for (size_t j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
-    rwlock_unlock(&event_list->lock_list);
+
     rwlock_unlock(&event->lock);
+    rwlock_unlock(&event_list->lock_list);
     return 1;
   }
-  rwlock_unlock(&event_list->lock_list);
+
   rwlock_unlock(&event->lock);
+  rwlock_unlock(&event_list->lock_list);
   return 0;
 }
 
@@ -205,6 +207,7 @@ int ems_show(unsigned int event_id, int fd) {
     return 1;
   }
 
+  rwlock_unlock(&event_list->lock_list);
   rwlock_rdlock(&event->lock); // already have the event, list can be altered
 
   // Write in the file
@@ -217,7 +220,6 @@ int ems_show(unsigned int event_id, int fd) {
 
       if (write(fd, seat_str, (size_t)len) != len) {
         fprintf(stderr, "Error writing to the file\n");
-        rwlock_unlock(&event_list->lock_list);
         rwlock_unlock(&event->lock);
         mutex_unlock(&out_file_mutex);
         return 1;
@@ -226,7 +228,6 @@ int ems_show(unsigned int event_id, int fd) {
       if (j < event->cols) {
         if (write(fd, " ", sizeof(char)) != 1) {
           fprintf(stderr, "Error writing to the file\n");
-          rwlock_unlock(&event_list->lock_list);
           rwlock_unlock(&event->lock);
           mutex_unlock(&out_file_mutex);
           return 1;
@@ -236,14 +237,12 @@ int ems_show(unsigned int event_id, int fd) {
 
     if (write(fd, "\n", sizeof(char)) != 1) {
       fprintf(stderr, "Error writing to the file\n");
-      rwlock_unlock(&event_list->lock_list);
       rwlock_unlock(&event->lock);
       mutex_unlock(&out_file_mutex);
       return 1;
     }
   }
 
-  rwlock_unlock(&event_list->lock_list);
   rwlock_unlock(&event->lock);
   mutex_unlock(&out_file_mutex);
   return 0;

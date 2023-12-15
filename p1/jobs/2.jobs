@@ -1,0 +1,10 @@
+CREATE 1 10 10
+RESERVE 1 [(1,1) (10,10)]
+
+# this should fail (1,1 already reserved)
+RESERVE 1 [(1,1) (1,2)]
+
+RESERVE 1 [(2,2)]
+SHOW 1
+
+LIST

@@ -1,0 +1,7 @@
+# this should fail (event not created)
+RESERVE 1 [(1,1) (10,10)]
+
+CREATE 1 10 10
+RESERVE 1 [(2,2)]
+SHOW 1
+LIST
