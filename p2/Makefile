@@ -14,7 +14,7 @@ endif
 
 all: server/ems client/client
 
-server/ems: common/io.o common/constants.h server/main.c server/operations.o server/eventlist.o
+server/ems: common/io.o common/constants.h server/server.c server/operations.o server/eventlist.o server/producer-consumer.o server/workers.o
 	$(CC) $(CFLAGS) $(SLEEP) -o $@ $^
 
 client/client: common/io.o client/main.c client/api.o client/parser.o
@@ -29,6 +29,6 @@ run: server/ems
 clean:
 	rm -f common/*.o client/*.o server/*.o server/ems client/client
 
-format:
+fmt:
 	@which clang-format >/dev/null 2>&1 || echo "Please install clang-format to run this command"
 	clang-format -i common/*.c common/*.h client/*.c client/*.h server/*.c server/*.h
