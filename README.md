@@ -10,7 +10,7 @@ The goal of this project is to gain hands-on experience in implementing scalable
 
 
 [Project 1 Statement](docs/statement-p1.pdf)
-[Project 2 Statement](docs/statement-p2.pdf)
+| [Project 2 Statement](docs/statement-p2.pdf)
 
 ___
 ### Made by:
