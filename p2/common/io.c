@@ -1,11 +1,12 @@
 #include "io.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int parse_uint(int fd, unsigned int *value, char *next) {
+int parse_uint(int fd, unsigned int* value, char* next) {
   char buf[16];
 
   int i = 0;
@@ -39,6 +40,27 @@ int parse_uint(int fd, unsigned int *value, char *next) {
   return 0;
 }
 
+int read_token(int fd, char* message, size_t buf_len) {
+  size_t i = 0;
+  while (i < buf_len - 1) {
+    ssize_t read_bytes = read(fd, message + i, 1);
+    if (read_bytes == -1) {
+      return 1;
+    } else if (read_bytes == 0) {
+      break;
+    }
+
+    if (message[i] == '\0' || message[i] < '|') {
+      message[i] = '\0';
+      break;
+    }
+
+    i++;
+  }
+
+  return 0;
+}
+
 int print_uint(int fd, unsigned int value) {
   char buffer[16];
   size_t i = 16;
@@ -63,7 +85,7 @@ int print_uint(int fd, unsigned int value) {
   return 0;
 }
 
-int print_str(int fd, const char *str) {
+int print_str(int fd, const char* str) {
   size_t len = strlen(str);
   while (len > 0) {
     ssize_t written = write(fd, str, len);
