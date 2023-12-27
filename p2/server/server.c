@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  /*
   while (1) {
     unsigned int op_code;
     char rest;
@@ -91,6 +92,7 @@ int main(int argc, char *argv[]) {
       return EXIT_FAILURE;
     }
   }
+  */
 
   server_close(server_pipename, server_fd);
   return 0;
@@ -140,7 +142,7 @@ int server_init(char *server_pipename, unsigned int delay_us) {
     free(workers);
     return EXIT_FAILURE;
   }
-  fprintf(stdout, "The server has been initialized with pipaname: %s.\n", server_pipename);
+  fprintf(stdout, "The server has been initialized with pipename: %s.\n", server_pipename);
 
   return 0;
 }
@@ -219,6 +221,10 @@ void *process_incoming_requests(void *arg) {
           break;
         default:
           break;
+      }
+
+      if (op_code == OP_CODE_QUIT_REQUEST) {
+        break;
       }
 
       parse_uint(request_fd, &op_code, &rest);

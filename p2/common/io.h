@@ -18,9 +18,6 @@ typedef struct {
 /// @return 0 if the integer was read successfully, 1 otherwise.
 int parse_uint(int fd, unsigned int *value, char *next);
 
-// TODO comment;
-char *readString(const int fd, const size_t lim);
-
 /// Prints an unsigned integer to the given file descriptor.
 /// @param fd The file descriptor to write to.
 /// @param value The value to write.
