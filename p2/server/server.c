@@ -57,7 +57,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  /*
+  
   while (1) {
     unsigned int op_code;
     char rest;
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
       return EXIT_FAILURE;
     }
   }
-  */
+  
 
   server_close(server_pipename, server_fd);
   return 0;
@@ -156,6 +156,7 @@ int receive_connection(int server_pipe_fd) {
     free(client);
     return 1;
   }
+  printf("client request pipename: %s\n", client_resquest_pipename);
   strcpy(client->request_pipename, client_resquest_pipename);
 
   char client_response_pipename[CLIENT_PIPE_MAX_LEN];
@@ -164,6 +165,8 @@ int receive_connection(int server_pipe_fd) {
     free(client);
     return 1;
   }
+  printf("client response pipename: %s\n", client_response_pipename);
+  strcpy(client->response_pipename, client_response_pipename);
 
   if (pcq_enqueue(queue, (void *)client)) {
     fprintf(stderr, "Failed to queue up client.\n");
@@ -175,7 +178,7 @@ int receive_connection(int server_pipe_fd) {
 }
 
 void *process_incoming_requests(void *arg) {
-  int session_id = *(int *)arg;
+  int session_id = (int)(intptr_t)arg;
 
   client_t *client;
   while (1) {
@@ -186,7 +189,7 @@ void *process_incoming_requests(void *arg) {
     }
 
     fprintf(stdout, "session id: %d\n", session_id);
-    // ems_setup_handler(session_id, client);
+    ems_setup_handler(session_id, client);
 
     // Open client pipe to read the op codes
     int request_fd = open(client->request_pipename, O_RDONLY);

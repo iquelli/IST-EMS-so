@@ -50,7 +50,7 @@ int read_token(int fd, char* message, size_t buf_len) {
       break;
     }
 
-    if (message[i] == '\0' || message[i] < '|') {
+    if (message[i] == '\0') {
       message[i] = '\0';
       break;
     }
