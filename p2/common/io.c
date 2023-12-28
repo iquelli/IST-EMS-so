@@ -42,16 +42,11 @@ int parse_uint(int fd, unsigned int* value, char* next) {
 
 int read_token(int fd, char* message, size_t buf_len) {
   size_t i = 0;
-  while (i < buf_len - 1) {
+  while (i < buf_len) {
     ssize_t read_bytes = read(fd, message + i, 1);
     if (read_bytes == -1) {
       return 1;
     } else if (read_bytes == 0) {
-      break;
-    }
-
-    if (message[i] == '\0') {
-      message[i] = '\0';
       break;
     }
 
@@ -82,6 +77,10 @@ int print_uint(int fd, unsigned int value) {
     i += (size_t)written;
   }
 
+  if (write(fd, "\0", 1) == -1) {
+    return 1;
+  }
+
   return 0;
 }
 
@@ -95,6 +94,33 @@ int print_str(int fd, const char* str) {
 
     str += (size_t)written;
     len -= (size_t)written;
+  }
+
+  return 0;
+}
+
+int print_str2(int fd, const char* str, size_t buf_len) {
+  size_t len = strlen(str);
+  size_t padding_len = buf_len - len;
+
+  while (len > 0) {
+    ssize_t written = write(fd, str, len);
+    if (written == -1) {
+      return 1;
+    }
+
+    str += (size_t)written;
+    len -= (size_t)written;
+  }
+
+  // Preenche o restante do buffer com '\0' se necessário
+  if (padding_len > 0) {
+    char padding[padding_len];
+    memset(padding, '\0', padding_len);
+
+    if (write(fd, padding, padding_len) == -1) {
+      return 1;
+    }
   }
 
   return 0;

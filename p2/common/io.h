@@ -32,4 +32,6 @@ int print_str(int fd, const char *str);
 
 int read_token(int fd, char *message, size_t buf_len);
 
+int print_str2(int fd, const char *str, size_t buf_len);
+
 #endif  // COMMON_IO_H

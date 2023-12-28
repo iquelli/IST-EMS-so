@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  
   while (1) {
     unsigned int op_code;
     char rest;
@@ -92,7 +91,6 @@ int main(int argc, char *argv[]) {
       return EXIT_FAILURE;
     }
   }
-  
 
   server_close(server_pipename, server_fd);
   return 0;
