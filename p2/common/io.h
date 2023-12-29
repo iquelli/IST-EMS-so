@@ -36,7 +36,7 @@ int print_uint(int fd, unsigned int value);
 int print_str(int fd, const char *str);
 
 /// Adds data to message to be sent to pipe. Used to preserve types.
-/// @param message Message to be sent. 
+/// @param message Message to be sent.
 /// @param offset Offset to write from.
 /// @param data Data to add.
 /// @param data_len Length of data to add

@@ -13,7 +13,7 @@ int ems_quit_handler(client_t *client);
 
 int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows, size_t num_cols);
 
-int ems_reserve_handler(client_t *client);
+int ems_reserve_handler(client_t *client, unsigned int event_id, size_t num_seats, size_t *xs, size_t *ys);
 
 int ems_show_handler(client_t *client);
 

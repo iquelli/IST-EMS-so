@@ -48,15 +48,12 @@ int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows,
   char response[response_len];
   size_t offset = 0;
   memset(response, 0, response_len);
-  int was_event_created = 0;  // flag to know whether event was created or not
 
   // create event and send message
-  if ((num_rows == 0) || ems_create(event_id, num_rows, num_cols)) {
-    was_event_created = 1;
-  }
+  int result = ems_create(event_id, num_rows, num_cols);
 
   // 0 to indicate it was created, 1 otherwise
-  create_message(response, &offset, &was_event_created, sizeof(int));
+  create_message(response, &offset, &result, sizeof(int));
 
   // Connect to client pipe and send response
   int response_fd = open(client->response_pipename, O_WRONLY);
@@ -74,7 +71,31 @@ int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows,
   return 0;
 }
 
-int ems_reserve_handler(client_t *client);
+int ems_reserve_handler(client_t *client, unsigned int event_id, size_t num_seats, size_t *xs, size_t *ys) {
+  size_t response_len = sizeof(int);
+  char response[response_len];
+  size_t offset = 0;
+  memset(response, 0, response_len);
+
+  int result = ems_reserve(event_id, num_seats, xs, ys);
+
+  create_message(response, &offset, &result, sizeof(int));
+
+  // Connect to client pipe and send response
+  int response_fd = open(client->response_pipename, O_WRONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+  if (pipe_print(response_fd, &response, response_len)) {
+    fprintf(stderr, "Failed to send response to setup.\n");
+    close(response_fd);
+    return 1;
+  }
+  close(response_fd);
+
+  return 0;
+}
 
 int ems_show_handler(client_t *client);
 

@@ -195,22 +195,67 @@ void *process_incoming_requests(void *arg) {
       }
 
       switch (op_code) {
-        case OP_CODE_CREATE_REQUEST:
-          // get args
+        case OP_CODE_CREATE_REQUEST: {
+          // Args
           unsigned int event_id;
           size_t num_rows, num_cols;
 
           if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
-              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
-            num_rows = 0;
+              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || 
+              pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
+            break;  // failed to get args
           }
-          ems_create_handler(client, event_id, num_rows, num_cols);
 
+          if (ems_create_handler(client, event_id, num_rows, num_cols)) {
+            fprintf(stderr, "Failed to perform ems_create for client.\n");
+          }
           break;
+        }
+
         case OP_CODE_RESERVE_REQUEST:
-          fprintf(stdout, "RESERVE\n");
-          // ems_reserve_handler(client);
+          // Args
+          unsigned int event_id;
+          size_t num_seats, *xs, *ys;
+
+          xs = malloc(sizeof(size_t) * num_seats);
+          ys = malloc(sizeof(size_t) * num_seats);
+
+          if (!xs || !ys) {
+            fprintf(stderr, "Memory allocation failed.\n");
+            free(xs);
+            free(ys);
+            break;
+          }
+
+          if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
+              pipe_parse(request_fd, &num_seats, sizeof(size_t))) {
+            free(xs);
+            free(ys);
+            break;  // failed to get args
+          }
+          for (size_t i = 0; i < num_seats; i++) {
+            if (pipe_parse(request_fd, &xs[i], sizeof(size_t))) {
+              free(xs);
+              free(ys);
+              break;  // failed to get args
+            }
+          }
+          for (size_t i = 0; i < num_seats; i++) {
+            if (pipe_parse(request_fd, &ys[i], sizeof(size_t))) {
+              free(xs);
+              free(ys);
+              break;  // failed to get args
+            }
+          }
+
+          if (ems_reserve_handler(client, event_id, num_seats, xs, ys)) {
+            fprintf(stderr, "Failed to perform ems_reserve for a client.\n");
+          }
+
+          free(xs);
+          free(ys);
           break;
+          
         case OP_CODE_SHOW_REQUEST:
           fprintf(stdout, "SHOW\n");
           // ems_show_handler(client);
@@ -220,15 +265,24 @@ void *process_incoming_requests(void *arg) {
           // ems_list_handler(client);
           break;
         case OP_CODE_QUIT_REQUEST:
-          fprintf(stdout, "QUIT\n");
-          // ems_quit_handler(client);
-          // TODO: sair da loop
+          // Will leave loop in following if opening up the session for another client
           break;
         default:
           break;
       }
 
       if (op_code == OP_CODE_QUIT_REQUEST) {
+        break;
+      }
+
+      // To avoid having active wait for another process to open the pipe.
+      int tmp_pipe = open(client->request_pipename, O_RDONLY);
+      if (tmp_pipe < 0) {
+        fprintf(stderr, "Failed to open client request pipe");
+        break;
+      }
+      if (close(tmp_pipe) < 0) {
+        fprintf(stderr, "Failed to close client request pipe");
         break;
       }
     }

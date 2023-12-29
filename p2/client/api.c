@@ -79,9 +79,6 @@ int ems_quit(void) {
 }
 
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
-  // TODO: send create request to the server (through the request pipe) and wait for the response (through the response
-  // pipe)
-
   // Initialize variables
   char op_code = OP_CODE_CREATE_REQUEST;
 
@@ -90,7 +87,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   size_t offset = 0;
   memset(request, 0, request_len);
 
-  // Create message to send:
+  // Create message:
   // [ op_code (char) ] | [ event_id (unsigned int) ] | [ num_rows (size_t) ] | [ num_cols (size_t)]
   create_message(request, &offset, &op_code, sizeof(char));
   create_message(request, &offset, &event_id, sizeof(unsigned int));
@@ -116,26 +113,72 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     fprintf(stderr, "Failed to open response pipe.\n");
     return 1;
   }
-  int was_event_not_created;
-  if (pipe_parse(response_fd, &was_event_not_created, sizeof(int))) {
-    fprintf(stderr, "Failed to read session id from server.\n");
+  int result;
+  if (pipe_parse(response_fd, &result, sizeof(int))) {
+    fprintf(stderr, "Failed to read result from server.\n");
     close(response_fd);
     return 1;
   }
   close(response_fd);
 
-  printf("Event %s created.\n", was_event_not_created ? "failed to be" : "was");
+  printf("Event %s created.\n", result ? "failed to be" : "was");
   return 0;
 }
 
 int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {
-  (void)event_id;
-  (void)num_seats;
-  (void)xs;
-  (void)ys;
-  // TODO: send reserve request to the server (through the request pipe) and wait for the response (through the response
-  // pipe)
-  return 1;
+  // Initialize variables
+  char op_code = OP_CODE_RESERVE_REQUEST;
+
+  size_t request_len =
+      sizeof(char) + sizeof(unsigned int) + sizeof(size_t) + sizeof(size_t) * num_seats + sizeof(size_t) * num_seats;
+
+  int8_t request[request_len];
+  size_t offset = 0;
+  memset(request, 0, request_len);
+
+  // Create message:
+  // [ op_code (char) ] | [ event_id (unsigned int) ] | [ num_seats (size_t) ] | [ xs (size_t[num_seats]) ] | [ ys
+  // (size_t[num_seats]) ]
+  create_message(request, &offset, &op_code, sizeof(char));
+  create_message(request, &offset, &event_id, sizeof(unsigned int));
+  create_message(request, &offset, &num_seats, sizeof(size_t));
+  for (size_t i = 0; i < num_seats; i++) {
+    create_message(request, &offset, &xs[i], sizeof(size_t));
+  }
+  for (size_t i = 0; i < num_seats; i++) {
+    create_message(request, &offset, &ys[i], sizeof(size_t));
+  }
+
+  // Open request pipe and send request.
+  int client_req_fd = open(client_req_pipe_path, O_WRONLY);
+  if (client_req_fd < 0) {
+    fprintf(stderr, "Failed to open client request pipe.\n");
+    return 1;
+  }
+  if (pipe_print(client_req_fd, &request, request_len)) {
+    fprintf(stderr, "Failed to send setup request to server pipe.\n");
+    close(client_req_fd);
+    return 1;
+  }
+  close(client_req_fd);
+
+
+  // Receive response
+  int response_fd = open(client_resp_pipe_path, O_RDONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+  int result;
+  if (pipe_parse(response_fd, &result, sizeof(int))) {
+    fprintf(stderr, "Failed to read result from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  close(response_fd);
+
+  printf("Event %s reserved.\n", result ? "failed to be" : "was");
+  return 0;
 }
 
 int ems_show(int out_fd, unsigned int event_id) {
