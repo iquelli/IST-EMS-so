@@ -1,11 +1,5 @@
 #include "io.h"
 
-#include <errno.h>
-#include <limits.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
 int parse_uint(int fd, unsigned int* value, char* next) {
   char buf[16];
 
@@ -40,22 +34,6 @@ int parse_uint(int fd, unsigned int* value, char* next) {
   return 0;
 }
 
-int read_token(int fd, char* message, size_t buf_len) {
-  size_t i = 0;
-  while (i < buf_len) {
-    ssize_t read_bytes = read(fd, message + i, 1);
-    if (read_bytes == -1) {
-      return 1;
-    } else if (read_bytes == 0) {
-      break;
-    }
-
-    i++;
-  }
-
-  return 0;
-}
-
 int print_uint(int fd, unsigned int value) {
   char buffer[16];
   size_t i = 16;
@@ -77,10 +55,6 @@ int print_uint(int fd, unsigned int value) {
     i += (size_t)written;
   }
 
-  if (write(fd, "\0", 1) == -1) {
-    return 1;
-  }
-
   return 0;
 }
 
@@ -99,28 +73,45 @@ int print_str(int fd, const char* str) {
   return 0;
 }
 
-int print_str2(int fd, const char* str, size_t buf_len) {
-  size_t len = strlen(str);
-  size_t padding_len = buf_len - len;
+void create_message(void* message, size_t* offset, const void* data, size_t data_len) {
+  memcpy(message + *offset, data, data_len);
+  *offset += data_len;
+}
 
-  while (len > 0) {
-    ssize_t written = write(fd, str, len);
-    if (written == -1) {
-      return 1;
+int pipe_print(int pipe_fd, const void* buf, size_t buf_len) {
+  size_t total_written = 0;
+
+  while (total_written < buf_len) {
+    ssize_t written = write(pipe_fd, buf + total_written, buf_len - total_written);
+
+    if ((written == -1 && errno == EINTR) || (written == 0)) {
+      return 1;  // Error other than interruption by signal or reached end of file
     }
 
-    str += (size_t)written;
-    len -= (size_t)written;
+    total_written += (size_t)written;
   }
 
-  // Preenche o restante do buffer com '\0' se necessário
-  if (padding_len > 0) {
-    char padding[padding_len];
-    memset(padding, '\0', padding_len);
+  return 0;
+}
 
-    if (write(fd, padding, padding_len) == -1) {
-      return 1;
+int pipe_parse(int pipe_fd, void* buf, size_t buf_len) {
+  size_t total_read = 0;
+
+  while (total_read < buf_len) {
+    ssize_t read_bytes = read(pipe_fd, (char*)buf + total_read, buf_len - total_read);
+
+    if (read_bytes == -1 && errno != EINTR) {
+      return 1;  // Error other than interruption
     }
+    if (read_bytes == 0) {
+      break;
+    }
+
+    total_read += (size_t)read_bytes;
+  }
+
+  if (total_read != buf_len) {
+    return 1;  // Incomplete read
   }
 
   return 0;

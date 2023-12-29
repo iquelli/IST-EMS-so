@@ -11,7 +11,7 @@ int ems_setup_handler(int session_id, client_t *client);
 
 int ems_quit_handler(client_t *client);
 
-int ems_create_handler(client_t *client);
+int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows, size_t num_cols);
 
 int ems_reserve_handler(client_t *client);
 

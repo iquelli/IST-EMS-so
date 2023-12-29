@@ -11,9 +11,10 @@
 #include "common/constants.h"
 #include "common/io.h"
 
-int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path) {
-  // TODO: create pipes and connect to the server
+char client_req_pipe_path[CLIENT_PIPE_MAX_LEN] = {0};
+char client_resp_pipe_path[CLIENT_PIPE_MAX_LEN] = {0};
 
+int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path) {
   // Remove existing pipes and create new ones
   if ((unlink(req_pipe_path) != 0 && errno != ENOENT) || mkfifo(req_pipe_path, 0777) < 0) {
     fprintf(stderr, "Failed to create request pipe.\n");
@@ -25,30 +26,50 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
-  // Connect to server
+  // Initialize variables
+  char op_code = OP_CODE_SETUP_REQUEST;
+  strcpy(client_req_pipe_path, req_pipe_path);
+  strcpy(client_resp_pipe_path, resp_pipe_path);
+
+  size_t request_len = sizeof(char) + sizeof(char) * CLIENT_PIPE_MAX_LEN + sizeof(char) * CLIENT_PIPE_MAX_LEN;
+  char request[request_len];
+  size_t offset = 0;
+  memset(request, 0, request_len);
+
+  // Create message:
+  // [ op_code (char) ] | [ client_request_pipe_path (char[40]) ] | [ client_response_pipe_path (char[40]) ]
+  create_message(request, &offset, &op_code, sizeof(char));
+  create_message(request, &offset, &client_req_pipe_path, CLIENT_PIPE_MAX_LEN * sizeof(char));
+  create_message(request, &offset, &client_resp_pipe_path, CLIENT_PIPE_MAX_LEN * sizeof(char));
+
+  // Connect to server and send request
   int server_fd = open(server_pipe_path, O_WRONLY);
   if (server_fd < 0) {
     fprintf(stderr, "Failed to open server pipe.\n");
     return 1;
   }
-
-  unsigned int op_code = OP_CODE_SETUP_REQUEST;
-  char request[CLIENT_PIPE_MAX_LEN];
-  char response[CLIENT_PIPE_MAX_LEN];
-
-  // Copy req_pipe_path to request
-  strcpy(request, req_pipe_path);
-  strcpy(response, resp_pipe_path);
-
-  if (print_uint(server_fd, op_code) || print_str2(server_fd, request, CLIENT_PIPE_MAX_LEN * sizeof(char)) ||
-      print_str2(server_fd, response, CLIENT_PIPE_MAX_LEN * sizeof(char))) {
-    fprintf(stderr, "Could not write to server pipe.\n");
+  if (pipe_print(server_fd, &request, request_len)) {
+    fprintf(stderr, "Failed to send setup request to server pipe.\n");
     close(server_fd);
     return 1;
   }
-
   close(server_fd);
 
+  // Receive response
+  int response_fd = open(client_resp_pipe_path, O_RDONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+  int session_id;
+  if (pipe_parse(response_fd, &session_id, sizeof(int))) {
+    fprintf(stderr, "Failed to read session id from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  close(response_fd);
+
+  printf("Setup completed successfully. Session ID %d has been assigned.\n", session_id);
   return 0;
 }
 
@@ -58,12 +79,53 @@ int ems_quit(void) {
 }
 
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
-  (void)event_id;
-  (void)num_rows;
-  (void)num_cols;
   // TODO: send create request to the server (through the request pipe) and wait for the response (through the response
   // pipe)
-  return 1;
+
+  // Initialize variables
+  char op_code = OP_CODE_CREATE_REQUEST;
+
+  size_t request_len = sizeof(char) + sizeof(unsigned int) + sizeof(size_t) + sizeof(size_t);
+  int8_t request[request_len];
+  size_t offset = 0;
+  memset(request, 0, request_len);
+
+  // Create message to send:
+  // [ op_code (char) ] | [ event_id (unsigned int) ] | [ num_rows (size_t) ] | [ num_cols (size_t)]
+  create_message(request, &offset, &op_code, sizeof(char));
+  create_message(request, &offset, &event_id, sizeof(unsigned int));
+  create_message(request, &offset, &num_rows, sizeof(size_t));
+  create_message(request, &offset, &num_cols, sizeof(size_t));
+
+  // Open request pipe and send request.
+  int client_req_fd = open(client_req_pipe_path, O_WRONLY);
+  if (client_req_fd < 0) {
+    fprintf(stderr, "Failed to open client request pipe.\n");
+    return 1;
+  }
+  if (pipe_print(client_req_fd, &request, request_len)) {
+    fprintf(stderr, "Failed to send setup request to server pipe.\n");
+    close(client_req_fd);
+    return 1;
+  }
+  close(client_req_fd);
+
+  // Receive response
+  int response_fd = open(client_resp_pipe_path, O_RDONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+  int was_event_not_created;
+  if (pipe_parse(response_fd, &was_event_not_created, sizeof(int))) {
+    fprintf(stderr, "Failed to read session id from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  close(response_fd);
+
+  printf("Event %s created.\n", was_event_not_created ? "failed to be" : "was");
+  return 0;
 }
 
 int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {

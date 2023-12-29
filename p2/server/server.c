@@ -58,16 +58,15 @@ int main(int argc, char *argv[]) {
   }
 
   while (1) {
-    unsigned int op_code;
-    char rest;
+    char op_code;
 
-    if (parse_uint(server_fd, &op_code, &rest)) {
+    if (pipe_parse(server_fd, &op_code, sizeof(char))) {
       fprintf(stderr, "Failed to read op code from server pipe: %s\n", server_pipename);
       server_close(server_pipename, server_fd);
       return EXIT_FAILURE;
     }
 
-    if (op_code != 1) {
+    if (op_code != OP_CODE_SETUP_REQUEST) {
       // in case it didn't receive a connection request, dismiss
       continue;
     }
@@ -149,21 +148,19 @@ int receive_connection(int server_pipe_fd) {
   client_t *client = (client_t *)malloc(sizeof(client_t));
 
   char client_resquest_pipename[CLIENT_PIPE_MAX_LEN];
-  if (read_token(server_pipe_fd, client_resquest_pipename, CLIENT_PIPE_MAX_LEN)) {
+  if (pipe_parse(server_pipe_fd, &client_resquest_pipename, CLIENT_PIPE_MAX_LEN * sizeof(char))) {
     fprintf(stderr, "Failed to read data out of server pipe.\n");
     free(client);
     return 1;
   }
-  printf("client request pipename: %s\n", client_resquest_pipename);
   strcpy(client->request_pipename, client_resquest_pipename);
 
   char client_response_pipename[CLIENT_PIPE_MAX_LEN];
-  if (read_token(server_pipe_fd, client_response_pipename, CLIENT_PIPE_MAX_LEN)) {
+  if (pipe_parse(server_pipe_fd, &client_response_pipename, CLIENT_PIPE_MAX_LEN * sizeof(char))) {
     fprintf(stderr, "Failed to read data out of server pipe.\n");
     free(client);
     return 1;
   }
-  printf("client response pipename: %s\n", client_response_pipename);
   strcpy(client->response_pipename, client_response_pipename);
 
   if (pcq_enqueue(queue, (void *)client)) {
@@ -186,22 +183,29 @@ void *process_incoming_requests(void *arg) {
       continue;
     }
 
-    fprintf(stdout, "session id: %d\n", session_id);
     ems_setup_handler(session_id, client);
 
     // Open client pipe to read the op codes
     int request_fd = open(client->request_pipename, O_RDONLY);
-    unsigned int op_code;
-    char rest;
-
-    parse_uint(request_fd, &op_code, &rest);
+    char op_code;
 
     while (1) {
+      if (pipe_parse(request_fd, &op_code, sizeof(char))) {
+        break;  // failed to get op code
+      }
+
       switch (op_code) {
-        // TODO NEED TO IMPLEMENT HANDLERS
         case OP_CODE_CREATE_REQUEST:
-          fprintf(stdout, "CREATE\n");
-          // ems_create_handler(client);
+          // get args
+          unsigned int event_id;
+          size_t num_rows, num_cols;
+
+          if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
+              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
+            num_rows = 0;
+          }
+          ems_create_handler(client, event_id, num_rows, num_cols);
+
           break;
         case OP_CODE_RESERVE_REQUEST:
           fprintf(stdout, "RESERVE\n");
@@ -218,7 +222,7 @@ void *process_incoming_requests(void *arg) {
         case OP_CODE_QUIT_REQUEST:
           fprintf(stdout, "QUIT\n");
           // ems_quit_handler(client);
-          // TODO: sair da loop aqui
+          // TODO: sair da loop
           break;
         default:
           break;
@@ -227,15 +231,11 @@ void *process_incoming_requests(void *arg) {
       if (op_code == OP_CODE_QUIT_REQUEST) {
         break;
       }
-
-      parse_uint(request_fd, &op_code, &rest);
     }
 
     close(request_fd);
     free(client);
   }
-
-  return NULL;
 }
 
 int server_close(char *server_pipename, int server_fd) {

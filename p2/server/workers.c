@@ -7,35 +7,72 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "operations.h"
+
 // Handlers
 
 // TODO: these all should read the pipe and perform the intended action,
 //       replying to client when necessary
 
 int ems_setup_handler(int session_id, client_t *client) {
-  // Open the client's response pipe for writing
+  // Initialize variables
+  size_t response_len = sizeof(int);
+  char response[response_len];
+  size_t offset = 0;
+  memset(response, 0, response_len);
+
+  // Create message:
+  // [session id (int)]
+  create_message(response, &offset, &session_id, sizeof(int));
+
+  // Connect to client pipe and send response
   int response_fd = open(client->response_pipename, O_WRONLY);
   if (response_fd == -1) {
     fprintf(stderr, "Failed to open response pipe.\n");
     return 1;
   }
-
-  // Send a response back to the client
-  if (print_uint(response_fd, (unsigned)session_id)) {
-    fprintf(stderr, "Failed to write to response pipe.\n");
+  if (pipe_print(response_fd, &response, response_len)) {
+    fprintf(stderr, "Failed to send response to setup.\n");
     close(response_fd);
     return 1;
   }
 
-  // Close the response pipe
   close(response_fd);
-
   return 0;
 }
 
 int ems_quit_handler(client_t *client);
 
-int ems_create_handler(client_t *client);
+int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows, size_t num_cols) {
+  size_t response_len = sizeof(int);
+  char response[response_len];
+  size_t offset = 0;
+  memset(response, 0, response_len);
+  int was_event_created = 0;  // flag to know whether event was created or not
+
+  // create event and send message
+  if ((num_rows == 0) || ems_create(event_id, num_rows, num_cols)) {
+    was_event_created = 1;
+  }
+
+  // 0 to indicate it was created, 1 otherwise
+  create_message(response, &offset, &was_event_created, sizeof(int));
+
+  // Connect to client pipe and send response
+  int response_fd = open(client->response_pipename, O_WRONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+  if (pipe_print(response_fd, &response, response_len)) {
+    fprintf(stderr, "Failed to send response to setup.\n");
+    close(response_fd);
+    return 1;
+  }
+  close(response_fd);
+
+  return 0;
+}
 
 int ems_reserve_handler(client_t *client);
 
