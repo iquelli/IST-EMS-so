@@ -216,6 +216,12 @@ void *process_incoming_requests(void *arg) {
           unsigned int event_id;
           size_t num_seats, *xs, *ys;
 
+
+          if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
+              pipe_parse(request_fd, &num_seats, sizeof(size_t))) {
+            break;  // failed to get args
+          }
+
           xs = malloc(sizeof(size_t) * num_seats);
           ys = malloc(sizeof(size_t) * num_seats);
 
@@ -224,13 +230,6 @@ void *process_incoming_requests(void *arg) {
             free(xs);
             free(ys);
             break;
-          }
-
-          if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
-              pipe_parse(request_fd, &num_seats, sizeof(size_t))) {
-            free(xs);
-            free(ys);
-            break;  // failed to get args
           }
           for (size_t i = 0; i < num_seats; i++) {
             if (pipe_parse(request_fd, &xs[i], sizeof(size_t))) {
@@ -294,7 +293,6 @@ void *process_incoming_requests(void *arg) {
       }
     }
 
-    printf("Session %d has concluded, and the worker is now available to serve new clients.\n", client->session_id);
     close(request_fd);
     free(client);
   }

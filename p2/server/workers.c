@@ -131,7 +131,6 @@ int ems_show_handler(client_t *client, unsigned int event_id) {
   }
   close(response_fd);
 
-  free(seats);
   return 0;
 }
 
