@@ -173,6 +173,40 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
+int get_event_info(unsigned int event_id, size_t* cols, unsigned int** data, size_t* rows) {
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return 1;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return 1;
+  }
+
+  struct Event* event = get_event_with_delay(event_id, event_list->head, event_list->tail);
+
+  pthread_rwlock_unlock(&event_list->rwl);
+
+  if (event == NULL) {
+    fprintf(stderr, "Event not found\n");
+    return 1;
+  }
+
+  if (pthread_mutex_lock(&event->mutex) != 0) {
+    fprintf(stderr, "Error locking mutex\n");
+    return 1;
+  }
+
+  *cols = event->cols;
+  *data = event->data;
+  *rows = event->rows;
+
+  pthread_mutex_unlock(&event->mutex);
+
+  return 0;
+}
+
 int ems_show(int out_fd, unsigned int event_id) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
@@ -226,6 +260,68 @@ int ems_show(int out_fd, unsigned int event_id) {
   }
 
   pthread_mutex_unlock(&event->mutex);
+  return 0;
+}
+
+int get_events(unsigned int** data, size_t* num_events) {
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return 1;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return 1;
+  }
+
+  struct ListNode* to = event_list->tail;
+  struct ListNode* current = event_list->head;
+
+  if (current == NULL) {
+    *data = NULL;
+    *num_events = 0;
+    pthread_rwlock_unlock(&event_list->rwl);
+    return 0;
+  }
+
+  // Allocate memory for storing event IDs dynamically
+  size_t array_size = 5;  // Initial size, adjust as needed
+  unsigned int* event_ids = (unsigned int*)malloc(sizeof(unsigned int) * array_size);
+  if (event_ids == NULL) {
+    perror("Error allocating memory for event IDs");
+    pthread_rwlock_unlock(&event_list->rwl);
+    return 1;
+  }
+
+  size_t i = 0;
+  while (1) {
+    event_ids[i] = (current->event)->id;
+    i++;
+
+    if (current == to) {
+      break;
+    }
+
+    current = current->next;
+
+    if (i >= array_size) {
+      array_size *= 2;  // Add space
+      unsigned int* temp = realloc(event_ids, sizeof(unsigned int) * array_size);
+      if (temp == NULL) {
+        perror("Error reallocating memory for event IDs");
+        free(event_ids);
+        pthread_rwlock_unlock(&event_list->rwl);
+        return 1;
+      }
+      event_ids = temp;
+    }
+  }
+
+  // Set the output parameters
+  *data = event_ids;
+  *num_events = i;
+
+  pthread_rwlock_unlock(&event_list->rwl);
   return 0;
 }
 

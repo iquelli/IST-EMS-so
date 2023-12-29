@@ -116,3 +116,58 @@ int pipe_parse(int pipe_fd, void* buf, size_t buf_len) {
 
   return 0;
 }
+
+int print_event(int out_fd, size_t num_rows, size_t num_cols, unsigned int* data) {
+  for (size_t i = 1; i <= num_rows; i++) {
+    for (size_t j = 1; j <= num_cols; j++) {
+      char buffer[16];
+      sprintf(buffer, "%u", data[(i - 1) * num_cols + j - 1]);
+      if (print_str(out_fd, buffer)) {
+        perror("Error writing to file descriptor");
+        return 1;
+      }
+
+      if (j < num_cols) {
+        if (print_str(out_fd, " ")) {
+          perror("Error writing to file descriptor");
+          return 1;
+        }
+      }
+    }
+
+    if (print_str(out_fd, "\n")) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+int print_ids(unsigned int* ids, size_t num_ids, int out_fd) {
+  if (num_ids == 0) {
+    char buff[] = "No events\n";
+    if (print_str(out_fd, buff)) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+    return 0;
+  }
+
+  for (size_t i = 0; i < num_ids; i++) {
+    char buff[] = "Event: ";
+    if (print_str(out_fd, buff)) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+
+    char id[16];
+    sprintf(id, "%u\n", ids[i]);
+    if (print_str(out_fd, id)) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+  }
+
+  return 0;
+}

@@ -24,7 +24,21 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols);
 /// @param xs Array of rows of the seats to reserve.
 /// @param ys Array of columns of the seats to reserve.
 /// @return 0 if the reservation was created successfully, 1 otherwise.
-int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs, size_t *ys);
+int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys);
+
+/// Gets information about a specific event.
+/// @param event_id The id of the event to retrive information.
+/// @param cols The variable to store the number of columns.
+/// @param data The variable to store the data.
+/// @param rows The variable to store the number of rows.
+/// @return 0 if successful, 1 otherwise.
+int get_event_info(unsigned int event_id, size_t* cols, unsigned int** data, size_t* rows);
+
+/// Gets all event ids.
+/// @param data Variable to store event ids.
+/// @param num_events Variable to store number of events.
+/// @return 0 if successful, 1 otherwise.
+int get_events(unsigned int** data, size_t* num_events);
 
 /// Prints the given event.
 /// @param out_fd File descriptor to print the event to.

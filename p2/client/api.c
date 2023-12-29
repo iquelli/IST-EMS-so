@@ -74,8 +74,35 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
 }
 
 int ems_quit(void) {
-  // TODO: close pipes
-  return 1;
+  char op_code = OP_CODE_QUIT_REQUEST;
+
+  size_t request_len = sizeof(char);
+  int8_t request[request_len];
+  size_t offset = 0;
+  memset(request, 0, request_len);
+
+  // Create message:
+  // [ op_code (char) ]
+  create_message(request, &offset, &op_code, sizeof(char));
+
+  // Open request pipe and send request.
+  int client_req_fd = open(client_req_pipe_path, O_WRONLY);
+  if (client_req_fd < 0) {
+    fprintf(stderr, "Failed to open client request pipe.\n");
+    return 1;
+  }
+  if (pipe_print(client_req_fd, &request, request_len)) {
+    fprintf(stderr, "Failed to send setup request to server pipe.\n");
+    close(client_req_fd);
+    return 1;
+  }
+  close(client_req_fd);
+
+  close(client_req_fd);
+  unlink(client_req_pipe_path);
+  unlink(client_resp_pipe_path);
+
+  return 0;
 }
 
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
@@ -162,7 +189,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   }
   close(client_req_fd);
 
-
   // Receive response
   int response_fd = open(client_resp_pipe_path, O_RDONLY);
   if (response_fd == -1) {
@@ -182,16 +208,151 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 }
 
 int ems_show(int out_fd, unsigned int event_id) {
-  (void)out_fd;
-  (void)event_id;
-  // TODO: send show request to the server (through the request pipe) and wait for the response (through the response
-  // pipe)
-  return 1;
+  // Initialize variables
+  char op_code = OP_CODE_SHOW_REQUEST;
+
+  size_t request_len = sizeof(char) + sizeof(unsigned int);
+  int8_t request[request_len];
+  size_t offset = 0;
+  memset(request, 0, request_len);
+
+  // Create message:
+  // [ op_code (char) ] | [ event_id (unsigned int) ]
+  create_message(request, &offset, &op_code, sizeof(char));
+  create_message(request, &offset, &event_id, sizeof(unsigned int));
+
+  // Open request pipe and send request.
+  int client_req_fd = open(client_req_pipe_path, O_WRONLY);
+  if (client_req_fd < 0) {
+    fprintf(stderr, "Failed to open client request pipe.\n");
+    return 1;
+  }
+  if (pipe_print(client_req_fd, &request, request_len)) {
+    fprintf(stderr, "Failed to send setup request to server pipe.\n");
+    close(client_req_fd);
+    return 1;
+  }
+  close(client_req_fd);
+
+  // Receive response
+  int response_fd = open(client_resp_pipe_path, O_RDONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+
+  int result;
+  if (pipe_parse(response_fd, &result, sizeof(int))) {
+    fprintf(stderr, "Failed to read result from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  size_t num_rows;
+  if (pipe_parse(response_fd, &num_rows, sizeof(size_t))) {
+    fprintf(stderr, "Failed to read number of rows from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  size_t num_cols;
+  if (pipe_parse(response_fd, &num_cols, sizeof(size_t))) {
+    fprintf(stderr, "Failed to read number of cols from server.\n");
+    close(response_fd);
+    return 1;
+  }
+
+  unsigned int* seats;
+  seats = malloc(sizeof(unsigned int) * num_cols * num_rows);
+  if (!seats) {
+    perror("Memory allocation failed");
+    free(seats);
+    return 1;
+  }
+  for (size_t i = 0; i < num_cols * num_rows; i++) {
+    if (pipe_parse(response_fd, &seats[i], sizeof(unsigned int))) {
+      fprintf(stderr, "Failed to read seats from server.\n");
+      free(seats);
+      close(response_fd);
+      return 1;
+    }
+  }
+
+  if (result || print_event(out_fd, num_rows, num_cols, seats)) {
+    return 1;
+  }
+
+  printf("Event %s shown.\n", result ? "failed to be" : "was");
+
+  free(seats);
+  close(response_fd);
+  return 0;
 }
 
 int ems_list_events(int out_fd) {
-  (void)out_fd;
-  // TODO: send list request to the server (through the request pipe) and wait for the response (through the response
-  // pipe)
-  return 1;
+  char op_code = OP_CODE_LIST_REQUEST;
+
+  size_t request_len = sizeof(char);
+  int8_t request[request_len];
+  size_t offset = 0;
+  memset(request, 0, request_len);
+
+  // Create message:
+  // [ op_code (char) ]
+  create_message(request, &offset, &op_code, sizeof(char));
+
+  // Open request pipe and send request.
+  int client_req_fd = open(client_req_pipe_path, O_WRONLY);
+  if (client_req_fd < 0) {
+    fprintf(stderr, "Failed to open client request pipe.\n");
+    return 1;
+  }
+  if (pipe_print(client_req_fd, &request, request_len)) {
+    fprintf(stderr, "Failed to send setup request to server pipe.\n");
+    close(client_req_fd);
+    return 1;
+  }
+  close(client_req_fd);
+
+  // Receive response
+  int response_fd = open(client_resp_pipe_path, O_RDONLY);
+  if (response_fd == -1) {
+    fprintf(stderr, "Failed to open response pipe.\n");
+    return 1;
+  }
+
+  int result;
+  if (pipe_parse(response_fd, &result, sizeof(int))) {
+    fprintf(stderr, "Failed to read result from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  size_t num_events;
+  if (pipe_parse(response_fd, &num_events, sizeof(size_t))) {
+    fprintf(stderr, "Failed to read number of rows from server.\n");
+    close(response_fd);
+    return 1;
+  }
+  unsigned int* ids;
+  ids = malloc(sizeof(unsigned int) * num_events);
+  if (!ids) {
+    perror("Memory allocation failed");
+    free(ids);
+    return 1;
+  }
+
+  for (size_t i = 0; i < num_events; i++) {
+    if (pipe_parse(response_fd, &ids[i], sizeof(unsigned int))) {
+      fprintf(stderr, "Failed to read ids from server.\n");
+      free(ids);
+      close(response_fd);
+      return 1;
+    }
+  }
+
+  if (result || print_ids(ids, num_events, out_fd)) {
+    return 1;
+  }
+
+  printf("Event %s list.\n", result ? "failed to be" : "was");
+
+  return 0;
 }

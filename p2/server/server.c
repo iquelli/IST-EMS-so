@@ -201,8 +201,7 @@ void *process_incoming_requests(void *arg) {
           size_t num_rows, num_cols;
 
           if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
-              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || 
-              pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
+              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
             break;  // failed to get args
           }
 
@@ -212,7 +211,7 @@ void *process_incoming_requests(void *arg) {
           break;
         }
 
-        case OP_CODE_RESERVE_REQUEST:
+        case OP_CODE_RESERVE_REQUEST: {
           // Args
           unsigned int event_id;
           size_t num_seats, *xs, *ys;
@@ -255,14 +254,22 @@ void *process_incoming_requests(void *arg) {
           free(xs);
           free(ys);
           break;
-          
-        case OP_CODE_SHOW_REQUEST:
-          fprintf(stdout, "SHOW\n");
-          // ems_show_handler(client);
+        }
+        case OP_CODE_SHOW_REQUEST: {
+          unsigned int event_id;
+
+          if (pipe_parse(request_fd, &event_id, sizeof(unsigned int))) {
+            break;  // failed to get args
+          }
+
+          if (ems_show_handler(client, event_id)) {
+            fprintf(stderr, "Failed to perform ems_show for a client.\n");
+          }
+
           break;
+        }
         case OP_CODE_LIST_REQUEST:
-          fprintf(stdout, "LIST\n");
-          // ems_list_handler(client);
+          ems_list_handler(client);
           break;
         case OP_CODE_QUIT_REQUEST:
           // Will leave loop in following if opening up the session for another client
@@ -287,6 +294,7 @@ void *process_incoming_requests(void *arg) {
       }
     }
 
+    printf("Session %d has concluded, and the worker is now available to serve new clients.\n", client->session_id);
     close(request_fd);
     free(client);
   }
