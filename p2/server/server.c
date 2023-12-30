@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +25,17 @@ static pc_queue_t *queue;
 // Workers
 static pthread_t *workers;
 
+// Server args
+char *server_pipename;
+int server_fd;
+
 int main(int argc, char *argv[]) {
+  // Register signal handler for SIGINT (Ctrl+C)
+  if (signal(SIGINT, server_close) == SIG_ERR) {
+    perror("Unable to register signal handler for SIGINT");
+    exit(EXIT_FAILURE);
+  }
+
   if (argc < 2 || argc > 3) {
     fprintf(stderr, "Usage: %s\n <pipe_path> [delay]\n", argv[0]);
     return EXIT_FAILURE;
@@ -43,17 +54,17 @@ int main(int argc, char *argv[]) {
     state_access_delay_us = (unsigned int)delay;
   }
 
-  char *server_pipename = argv[1];
+  server_pipename = argv[1];
 
   // Intializes server, creates worker threads
-  if (server_init(server_pipename, state_access_delay_us)) {
+  if (server_init(state_access_delay_us)) {
     return EXIT_FAILURE;
   }
 
-  int server_fd = open(server_pipename, O_RDONLY);
+  server_fd = open(server_pipename, O_RDONLY);
   if (server_fd < 0) {
     fprintf(stderr, "Failed to open server pipe.\n");
-    server_close(server_pipename, server_fd);
+    server_close(0);
     return EXIT_FAILURE;
   }
 
@@ -62,7 +73,7 @@ int main(int argc, char *argv[]) {
 
     if (pipe_parse(server_fd, &op_code, sizeof(char))) {
       fprintf(stderr, "Failed to read op code from server pipe: %s\n", server_pipename);
-      server_close(server_pipename, server_fd);
+      server_close(0);
       return EXIT_FAILURE;
     }
 
@@ -73,7 +84,7 @@ int main(int argc, char *argv[]) {
 
     // Reads rest of message and adds client to queue
     if (receive_connection(server_fd)) {
-      server_close(server_pipename, server_fd);
+      server_close(0);
       return EXIT_FAILURE;
     }
 
@@ -81,21 +92,21 @@ int main(int argc, char *argv[]) {
     int tmp_pipe = open(server_pipename, O_RDONLY);
     if (tmp_pipe < 0) {
       fprintf(stderr, "Failed to open server pipe");
-      server_close(server_pipename, server_fd);
+      server_close(0);
       return EXIT_FAILURE;
     }
     if (close(tmp_pipe) < 0) {
       fprintf(stderr, "Failed to close server pipe");
-      server_close(server_pipename, server_fd);
+      server_close(0);
       return EXIT_FAILURE;
     }
   }
 
-  server_close(server_pipename, server_fd);
+  server_close(0);
   return 0;
 }
 
-int server_init(char *server_pipename, unsigned int delay_us) {
+int server_init(unsigned int delay_us) {
   // Initialize EMS state.
   if (ems_init(delay_us)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -297,10 +308,12 @@ void *process_incoming_requests(void *arg) {
   }
 }
 
-int server_close(char *server_pipename, int server_fd) {
+void server_close(int signum) {
+  fprintf(stdout, "Closing up server.\n");
+
   if (ems_terminate()) {
     fprintf(stderr, "Failed to destroy EMS\n");
-    return EXIT_FAILURE;
+    exit(EXIT_FAILURE);
   }
 
   pcq_destroy(queue);
@@ -310,7 +323,9 @@ int server_close(char *server_pipename, int server_fd) {
   close(server_fd);
   unlink(server_pipename);
 
-  return 0;
+  if (signum != 0) {
+    exit(EXIT_SUCCESS);
+  }
 }
 
 int workers_init() {

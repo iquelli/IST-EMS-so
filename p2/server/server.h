@@ -7,13 +7,11 @@
 /// @param pipename Name of the server pipe.
 /// @param delay Delay of EMS in microseconds.
 /// @return 0 if the server was initialized successfully, 1 otherwise.
-int server_init(char *pipename, unsigned int delay_us);
+int server_init(unsigned int delay_us);
 
 /// Closes the server and EMS state.
-/// @param pipename Name of the server pipe.
-/// @param server_fd File descriptor of the server pipe.
-/// @return 0 if the server was closed successfully, 1 otherwise.
-int server_close(char *pipename, int server_fd);
+/// @param signum Signal received.
+void server_close(int signum);
 
 /// Creates worker threads.
 /// @return 0 if the threads were created successfuly, 1 otherwise.
