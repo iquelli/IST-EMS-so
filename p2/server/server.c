@@ -216,7 +216,6 @@ void *process_incoming_requests(void *arg) {
           unsigned int event_id;
           size_t num_seats, *xs, *ys;
 
-
           if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
               pipe_parse(request_fd, &num_seats, sizeof(size_t))) {
             break;  // failed to get args

@@ -112,10 +112,12 @@ int ems_show_handler(client_t *client, unsigned int event_id) {
   // [ result (int) ] | [ num_rows (size_t) ] | [ num_cols (size_t) ]
   // | [ seats[num_rows * num_cols] (unsigned int) ]
   create_message(response, &offset, &result, sizeof(int));
-  create_message(response, &offset, &num_rows, sizeof(size_t));
-  create_message(response, &offset, &num_cols, sizeof(size_t));
-  for (size_t i = 0; i < num_cols * num_rows; i++) {
-    create_message(response, &offset, &seats[i], sizeof(unsigned int));
+  if (result == 0) {
+    create_message(response, &offset, &num_rows, sizeof(size_t));
+    create_message(response, &offset, &num_cols, sizeof(size_t));
+    for (size_t i = 0; i < num_cols * num_rows; i++) {
+      create_message(response, &offset, &seats[i], sizeof(unsigned int));
+    }
   }
 
   // Connect to client pipe and send response

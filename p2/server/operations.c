@@ -176,6 +176,9 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 int get_event_info(unsigned int event_id, size_t* cols, unsigned int** data, size_t* rows) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
+    *cols = 0;
+    *data = NULL;
+    *rows = 0;
     return 1;
   }
 
@@ -190,11 +193,17 @@ int get_event_info(unsigned int event_id, size_t* cols, unsigned int** data, siz
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
+    *cols = 0;
+    *data = NULL;
+    *rows = 0;
     return 1;
   }
 
   if (pthread_mutex_lock(&event->mutex) != 0) {
     fprintf(stderr, "Error locking mutex\n");
+    *cols = 0;
+    *data = NULL;
+    *rows = 0;
     return 1;
   }
 

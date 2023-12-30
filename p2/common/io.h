@@ -4,10 +4,10 @@
 #include <errno.h>
 #include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdio.h>
 
 #include "constants.h"
 
@@ -63,13 +63,13 @@ int pipe_parse(int pipe_fd, void *buf, size_t buf_len);
 /// @param num_cols Number of collumns of event.
 /// @param data Data of the event.
 /// @return 0 if successfull, 1 otherwise.
-int print_event(int out_fd, size_t num_rows, size_t num_cols, unsigned int* data);
+int print_event(int out_fd, size_t num_rows, size_t num_cols, unsigned int *data);
 
 /// Prints ids into a file.
 /// @param ids Ids to print.
 /// @param num_ids Number of ids to print.
 /// @param out_fd File descriptor of the file.
 /// @return 0 if successfull, 1 otherwise.
-int print_ids(unsigned int* ids, size_t num_ids, int out_fd);
+int print_ids(unsigned int *ids, size_t num_ids, int out_fd);
 
 #endif  // COMMON_IO_H
