@@ -2,10 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "api.h"
 #include "common/constants.h"
 #include "parser.h"
+
+volatile sig_atomic_t shutdown_signaler = 0;
+void client_shutdown(int signum) { shutdown_signaler = signum; }
 
 int main(int argc, char* argv[]) {
   if (argc < 5) {
@@ -13,6 +17,9 @@ int main(int argc, char* argv[]) {
             argv[0]);
     return 1;
   }
+
+  signal(SIGINT, client_shutdown);
+  signal(SIGPIPE, SIG_IGN);
 
   if (ems_setup(argv[1], argv[2], argv[3])) {
     fprintf(stderr, "Failed to set up EMS\n");

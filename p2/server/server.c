@@ -56,6 +56,8 @@ int main(int argc, char *argv[]) {
 
   server_pipename = argv[1];
 
+  signal(SIGPIPE, SIG_IGN);
+
   // Intializes server, creates worker threads
   if (server_init(state_access_delay_us)) {
     return EXIT_FAILURE;
@@ -309,7 +311,7 @@ void *process_incoming_requests(void *arg) {
 }
 
 void server_close(int signum) {
-  fprintf(stdout, "Closing up server.\n");
+  fprintf(stdout, "\nClosing up server.\n");
 
   if (ems_terminate()) {
     fprintf(stderr, "Failed to destroy EMS\n");
