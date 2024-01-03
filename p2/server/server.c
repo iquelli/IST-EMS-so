@@ -29,7 +29,7 @@ static pthread_t *workers;
 char *server_pipename;
 int server_fd;
 
-// Signalsq
+// Signals
 volatile sig_atomic_t received_sigusr1 = 0;
 
 void sigusr1_handler(int signum) {
@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
 
   server_pipename = argv[1];
 
-  // signal(SIGPIPE, SIG_IGN);
+  signal(SIGPIPE, SIG_IGN);
 
   // Intializes server, creates worker threads
   if (server_init(state_access_delay_us)) {
@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
   while (1) {
     if (received_sigusr1 != 0) {
       ems_list_events();
+      setup_signal_handlers();  // setup again to make sure the signal is still setup correctly
       received_sigusr1 = 0;
     }
 
@@ -220,7 +221,8 @@ void *process_incoming_requests(void *arg) {
           size_t num_rows, num_cols;
 
           if (pipe_parse(request_fd, &event_id, sizeof(unsigned int)) ||
-              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
+              pipe_parse(request_fd, &num_rows, sizeof(size_t)) || 
+              pipe_parse(request_fd, &num_cols, sizeof(size_t))) {
             break;  // failed to get args
           }
 
@@ -337,7 +339,7 @@ void server_close(int signum) {
 }
 
 int workers_init() {
-  for (int i = 0; i < MAX_SESSION_COUNT; i++) {  // TODO: only one session for now
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
     if (pthread_create(&workers[i], NULL, process_incoming_requests, (void *)(intptr_t)i) != 0) {
       return 1;
     }

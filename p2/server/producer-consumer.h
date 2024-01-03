@@ -40,10 +40,6 @@ int pcq_destroy(pc_queue_t *queue);
 /// @return 0 if successfull, 1 otherwise.
 int pcq_enqueue(pc_queue_t *queue, void *elem);
 
-// pcq_dequeue: remove an element from the back of the queue
-//
-// If the queue is empty, sleep until the queue has an element
-
 /// Removes an element from the back of the queue.
 /// @param queue Queue to be altered.
 /// @return 0 if successfull, 1 otherwise.
