@@ -41,14 +41,12 @@ int get_event_info(unsigned int event_id, size_t* cols, unsigned int** data, siz
 int get_events(unsigned int** data, size_t* num_events);
 
 /// Prints the given event.
-/// @param out_fd File descriptor to print the event to.
 /// @param event_id Id of the event to print.
 /// @return 0 if the event was printed successfully, 1 otherwise.
-int ems_show(int out_fd, unsigned int event_id);
+int ems_show(unsigned int event_id);
 
 /// Prints all the events.
-/// @param out_fd File descriptor to print the events to.
 /// @return 0 if the events were printed successfully, 1 otherwise.
-int ems_list_events(int out_fd);
+int ems_list_events();
 
 #endif  // SERVER_OPERATIONS_H

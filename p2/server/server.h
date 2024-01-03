@@ -22,4 +22,8 @@ int workers_init();
 /// @return 0 if successfull, 1 otherwise.
 int receive_connection(int server_pipe_fd);
 
+/// Sets up signal handlers for server.
+/// @return 0 if successful, 1 otherwise
+int setup_signal_handlers();
+
 #endif  // __SERVER_H__

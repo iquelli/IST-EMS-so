@@ -29,13 +29,15 @@ static pthread_t *workers;
 char *server_pipename;
 int server_fd;
 
-int main(int argc, char *argv[]) {
-  // Register signal handler for SIGINT (Ctrl+C)
-  if (signal(SIGINT, server_close) == SIG_ERR) {
-    perror("Unable to register signal handler for SIGINT");
-    exit(EXIT_FAILURE);
-  }
+// Signalsq
+volatile sig_atomic_t received_sigusr1 = 0;
 
+void sigusr1_handler(int signum) {
+  printf("Received SIGUSR1 signal\n");
+  received_sigusr1 = signum;
+}
+
+int main(int argc, char *argv[]) {
   if (argc < 2 || argc > 3) {
     fprintf(stderr, "Usage: %s\n <pipe_path> [delay]\n", argv[0]);
     return EXIT_FAILURE;
@@ -56,14 +58,15 @@ int main(int argc, char *argv[]) {
 
   server_pipename = argv[1];
 
-  signal(SIGPIPE, SIG_IGN);
+  // signal(SIGPIPE, SIG_IGN);
 
   // Intializes server, creates worker threads
   if (server_init(state_access_delay_us)) {
     return EXIT_FAILURE;
   }
 
-  server_fd = open(server_pipename, O_RDONLY);
+  // With write so server can start even without clients
+  server_fd = open(server_pipename, O_RDWR);
   if (server_fd < 0) {
     fprintf(stderr, "Failed to open server pipe.\n");
     server_close(0);
@@ -71,12 +74,15 @@ int main(int argc, char *argv[]) {
   }
 
   while (1) {
-    char op_code;
+    if (received_sigusr1 != 0) {
+      ems_list_events();
+      received_sigusr1 = 0;
+    }
 
-    if (pipe_parse(server_fd, &op_code, sizeof(char))) {
-      fprintf(stderr, "Failed to read op code from server pipe: %s\n", server_pipename);
-      server_close(0);
-      return EXIT_FAILURE;
+    char op_code;
+    if (pipe_parse(server_fd, &op_code, sizeof(char)) == 1) {
+      // if it can't get an op code, continue
+      continue;
     }
 
     if (op_code != OP_CODE_SETUP_REQUEST) {
@@ -89,19 +95,6 @@ int main(int argc, char *argv[]) {
       server_close(0);
       return EXIT_FAILURE;
     }
-
-    // To avoid having active wait for another process to open the pipe.
-    int tmp_pipe = open(server_pipename, O_RDONLY);
-    if (tmp_pipe < 0) {
-      fprintf(stderr, "Failed to open server pipe");
-      server_close(0);
-      return EXIT_FAILURE;
-    }
-    if (close(tmp_pipe) < 0) {
-      fprintf(stderr, "Failed to close server pipe");
-      server_close(0);
-      return EXIT_FAILURE;
-    }
   }
 
   server_close(0);
@@ -109,6 +102,10 @@ int main(int argc, char *argv[]) {
 }
 
 int server_init(unsigned int delay_us) {
+  if (setup_signal_handlers()) {
+    return EXIT_FAILURE;
+  }
+
   // Initialize EMS state.
   if (ems_init(delay_us)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -187,6 +184,15 @@ int receive_connection(int server_pipe_fd) {
 
 void *process_incoming_requests(void *arg) {
   int session_id = (int)(intptr_t)arg;
+
+  // setup signal
+  sigset_t sigmask;
+  sigemptyset(&sigmask);
+  sigaddset(&sigmask, SIGUSR1);
+
+  if (pthread_sigmask(SIG_BLOCK, &sigmask, NULL) != 0) {
+    perror("Failed to block SIGUSR1");
+  }
 
   client_t *client;
   while (1) {
@@ -311,7 +317,7 @@ void *process_incoming_requests(void *arg) {
 }
 
 void server_close(int signum) {
-  fprintf(stdout, "\nClosing up server.\n");
+  fprintf(stdout, "\nClosing up server...\n");
 
   if (ems_terminate()) {
     fprintf(stderr, "Failed to destroy EMS\n");
@@ -336,5 +342,20 @@ int workers_init() {
       return 1;
     }
   }
+  return 0;
+}
+
+int setup_signal_handlers() {
+  // Register signal handler for SIGINT (Ctrl+C)
+  if (signal(SIGINT, server_close) == SIG_ERR) {
+    perror("Unable to register signal handler for SIGINT");
+    return 1;
+  }
+  // Register signal handler for SIGUSR1
+  if (signal(SIGUSR1, sigusr1_handler) == SIG_ERR) {
+    perror("Unable to register signal handler for SIGUSR1");
+    return 1;
+  }
+
   return 0;
 }

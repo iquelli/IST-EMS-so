@@ -1,8 +1,8 @@
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 
 #include "api.h"
 #include "common/constants.h"
