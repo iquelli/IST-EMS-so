@@ -3,13 +3,9 @@
 
 #include "common/io.h"
 
-// Handler functions for client requests.
-
-// TODO: Add whatever params they need and comment function
+// Handler functions for client requests on the server side.
 
 int ems_setup_handler(int session_id, client_t *client);
-
-int ems_quit_handler(client_t *client);
 
 int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows, size_t num_cols);
 
@@ -18,7 +14,5 @@ int ems_reserve_handler(client_t *client, unsigned int event_id, size_t num_seat
 int ems_show_handler(client_t *client, unsigned int event_id);
 
 int ems_list_handler(client_t *client);
-
-int fail_message(client_t *client);
 
 #endif  // __WORKERS_H__

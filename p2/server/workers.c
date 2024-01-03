@@ -11,9 +11,6 @@
 
 // Handlers
 
-// TODO: these all should read the pipe and perform the intended action,
-//       replying to client when necessary
-
 int ems_setup_handler(int session_id, client_t *client) {
   // Initialize variables
   size_t response_len = sizeof(int);
@@ -39,8 +36,6 @@ int ems_setup_handler(int session_id, client_t *client) {
   close(response_fd);
   return 0;
 }
-
-int ems_quit_handler(client_t *client);
 
 int ems_create_handler(client_t *client, unsigned int event_id, size_t num_rows, size_t num_cols) {
   size_t response_len = sizeof(int);

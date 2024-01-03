@@ -288,10 +288,12 @@ void *process_incoming_requests(void *arg) {
           break;
         }
         case OP_CODE_LIST_REQUEST:
-          ems_list_handler(client);
+          if (ems_list_handler(client)) {
+            fprintf(stderr, "Failed to perform ems_list for a client.\n");
+          }
           break;
         case OP_CODE_QUIT_REQUEST:
-          // Will leave loop in following if opening up the session for another client
+          // Will leave loop in following if, opening up the session for another client
           break;
         default:
           break;
