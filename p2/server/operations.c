@@ -340,11 +340,14 @@ int ems_list_events() {
   }
 
   while (current != NULL) {
+    printf("---------------------------\n");
     printf("Event: ");
     printf("%u\n", (current->event)->id);
     ems_show((current->event)->id);
+
     current = current->next;
   }
+  printf("---------------------------\n");
 
   pthread_rwlock_unlock(&event_list->rwl);
   return 0;

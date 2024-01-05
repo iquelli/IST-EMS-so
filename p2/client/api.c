@@ -16,12 +16,12 @@ char client_resp_pipe_path[CLIENT_PIPE_MAX_LEN] = {0};
 
 int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path) {
   // Remove existing pipes and create new ones
-  if ((unlink(req_pipe_path) != 0 && errno != ENOENT) || mkfifo(req_pipe_path, 0777) < 0) {
+  if ((unlink(req_pipe_path) != 0 && errno != ENOENT) || mkfifo(req_pipe_path, 0640) < 0) {
     fprintf(stderr, "Failed to create request pipe.\n");
     return 1;
   }
 
-  if ((unlink(resp_pipe_path) != 0 && errno != ENOENT) || mkfifo(resp_pipe_path, 0777) < 0) {
+  if ((unlink(resp_pipe_path) != 0 && errno != ENOENT) || mkfifo(resp_pipe_path, 0640) < 0) {
     fprintf(stderr, "Failed to create response pipe.\n");
     return 1;
   }

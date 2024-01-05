@@ -142,7 +142,7 @@ int server_init(unsigned int delay_us) {
   }
 
   // Initialize the server
-  if ((unlink(server_pipename) != 0 && errno != ENOENT) || mkfifo(server_pipename, 0777) < 0) {
+  if ((unlink(server_pipename) != 0 && errno != ENOENT) || mkfifo(server_pipename, 0640) < 0) {
     fprintf(stderr, "Failed to initialize server.\n");
     ems_terminate();
     pcq_destroy(queue);
